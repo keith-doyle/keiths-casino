@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "478756589985",
+    "project_id": "cards-app-dev-426b3",
+    "storage_bucket": "cards-app-dev-426b3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:478756589985:android:dfde55f6e9d3f187647be0",
+        "android_client_info": {
+          "package_name": "com.example.card_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBu_1qiRW0HaylRYoe2LLrNPwiBAT8TYFw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:478756589985:android:ef072e0e178ae930647be0",
+        "android_client_info": {
+          "package_name": "com.example.cards_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBu_1qiRW0HaylRYoe2LLrNPwiBAT8TYFw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:478756589985:android:f4e37680b3404aaf647be0",
+        "android_client_info": {
+          "package_name": "com.example.fyp_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBu_1qiRW0HaylRYoe2LLrNPwiBAT8TYFw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
