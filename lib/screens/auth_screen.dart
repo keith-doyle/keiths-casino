@@ -92,14 +92,23 @@ class _AuthScreenState extends State<AuthScreen> {
     } on StateError catch (e) {
       if (e.message == 'USERNAME_TAKEN_RACE') {
         await FirebaseAuth.instance.currentUser?.delete();
-        setState(() =>
-        _error = 'That username was just taken. Please choose another.');
+        setState(() {
+          _error = 'That username was just taken. Please choose another.';
+        });
       } else {
         setState(() => _error = 'Something went wrong. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailC.dispose();
+    _passwordC.dispose();
+    _usernameC.dispose();
+    super.dispose();
   }
 
   @override
@@ -144,9 +153,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 onPressed: _busy
                     ? null
                     : () => setState(() => _isLogin = !_isLogin),
-                child: Text(_isLogin
-                    ? 'Need an account? Register'
-                    : 'Have an account? Login'),
+                child: Text(
+                  _isLogin ? 'Need an account? Register' : 'Have an account? Login',
+                ),
               ),
             ],
           ),

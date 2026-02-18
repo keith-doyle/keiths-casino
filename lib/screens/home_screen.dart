@@ -1,27 +1,13 @@
-// screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'profile_screen.dart';
 import 'blackjack_screen.dart';
+import 'matches_screen.dart';
+import 'stats_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
-
-  Future<void> _addTestMatch() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final matches = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('matches');
-
-    await matches.add({
-      'gameType': 'Blackjack',
-      'result': 'Win',
-      'playedAt': FieldValue.serverTimestamp(),
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +19,8 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.person),
             onPressed: () {
               Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ProfileScreen()));
+                MaterialPageRoute(builder: (_) => ProfileScreen()),
+              );
             },
           ),
           IconButton(
@@ -47,17 +34,32 @@ class HomeScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             FilledButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Add Test Match'),
-              onPressed: _addTestMatch,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
               icon: const Icon(Icons.casino),
               label: const Text('Play Blackjack'),
               onPressed: () {
                 Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const BlackjackScreen()));
+                  MaterialPageRoute(builder: (_) => const BlackjackScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              icon: const Icon(Icons.history),
+              label: const Text('My Matches'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => MatchesScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              icon: const Icon(Icons.bar_chart),
+              label: const Text('Stats'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const StatsScreen()),
+                );
               },
             ),
           ],

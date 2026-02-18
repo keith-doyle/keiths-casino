@@ -1,10 +1,14 @@
-// screens/matches_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MatchesScreen extends StatelessWidget {
   MatchesScreen({super.key});
+
+  String _fmtPlayedAt(dynamic ts) {
+    if (ts is! Timestamp) return '-';
+    return ts.toDate().toLocal().toString().split('.').first;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,21 +38,18 @@ class MatchesScreen extends StatelessWidget {
           return ListView.separated(
             itemBuilder: (context, i) {
               final data = docs[i].data();
-              final played = (data['playedAt'] as Timestamp)
-                  .toDate()
-                  .toLocal()
-                  .toString()
-                  .split('.')
-                  .first;
+              final played = _fmtPlayedAt(data['playedAt']);
+
+              final gameType = (data['gameType'] ?? 'Unknown').toString();
+              final result = (data['result'] ?? '-').toString();
 
               return ListTile(
                 leading: const Icon(Icons.sports_esports),
-                title: Text('${data['gameType']} • ${data['result']}'),
+                title: Text('$gameType • $result'),
                 subtitle: Text(played),
               );
             },
-            separatorBuilder: (_, __) =>
-            const Divider(height: 1),
+            separatorBuilder: (_, __) => const Divider(height: 1),
             itemCount: docs.length,
           );
         },
