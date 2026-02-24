@@ -1,23 +1,25 @@
 import json
+import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import blackjack
 
 router = APIRouter()
 
-
-def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
+async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
     payload = {"type": "error", "status": status}
     if extra:
         payload.update(extra)
-    return ws.send_text(json.dumps(payload))
-
+    await ws.send_text(json.dumps(payload))
 
 @router.websocket("/ws/blackjack/{room_id}")
 async def blackjack_ws(websocket: WebSocket, room_id: str):
     print("WS endpoint hit for room:", room_id)
     await websocket.accept()
     print("Client accepted in room", room_id)
+
+ 
+    session_game_id = uuid.uuid4().hex
 
     await websocket.send_text(
         json.dumps({"type": "system", "status": f"Connected to room {room_id}"})
@@ -42,25 +44,24 @@ async def blackjack_ws(websocket: WebSocket, room_id: str):
                 continue
 
             action = msg.get("action")
-            game_id = msg.get("game_id")
 
             if action not in {"deal", "hit", "stand"}:
                 await _send_error(websocket, "Unknown action.", {"action": action})
-                continue
-
-            if action in {"hit", "stand"} and not game_id:
-                await _send_error(websocket, "Missing game_id. Send deal first.")
                 continue
 
             try:
                 if action == "deal":
                     payload = blackjack.deal()
                 elif action == "hit":
-                    payload = blackjack.hit(game_id)
+                    payload = blackjack.hit(session_game_id)
                 else:
-                    payload = blackjack.stand(game_id)
+                    payload = blackjack.stand(session_game_id)
 
                 payload["type"] = "state"
+                payload["game_id"] = session_game_id  
+
+
+
                 await websocket.send_text(json.dumps(payload))
 
             except Exception as e:
