@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'profile_screen.dart';
-import 'blackjack_screen.dart';
 import 'matches_screen.dart';
 import 'stats_screen.dart';
+import 'package:fyp_app/screens/Blackjack_lobby_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
@@ -18,7 +17,8 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
-              Navigator.of(context).push(
+              Navigator.push(
+                context,
                 MaterialPageRoute(builder: (_) => ProfileScreen()),
               );
             },
@@ -38,7 +38,7 @@ class HomeScreen extends StatelessWidget {
               label: const Text('Play Blackjack'),
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BlackjackScreen()),
+                  MaterialPageRoute(builder: (_) => const BlackjackLobbyScreen()),
                 );
               },
             ),
