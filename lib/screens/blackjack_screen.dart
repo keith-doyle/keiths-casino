@@ -43,7 +43,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final roomId = uid ?? "testroom";
 
-    _ws.connect(roomId: roomId);
+    _ws.connectToBlackjack(roomId: roomId);
 
     _sub = _ws.stream?.listen(
           (event) async {

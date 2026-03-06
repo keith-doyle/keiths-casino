@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'profile_screen.dart';
 import 'matches_screen.dart';
 import 'stats_screen.dart';
-import 'package:fyp_app/screens/Blackjack_lobby_screen.dart';
+import 'Blackjack_lobby_screen.dart';
+import 'blackjack_screen.dart'; //
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
@@ -34,7 +36,7 @@ class HomeScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             FilledButton.icon(
-              icon: const Icon(Icons.casino),
+              icon: const Icon(Icons.group),
               label: const Text('Play Blackjack'),
               onPressed: () {
                 Navigator.of(context).push(
@@ -42,7 +44,21 @@ class HomeScreen extends StatelessWidget {
                 );
               },
             ),
+
+            const SizedBox(height: 12),
+
+            OutlinedButton.icon(
+              icon: const Icon(Icons.casino),
+              label: const Text('Blackjack'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const BlackjackScreen()),
+                );
+              },
+            ),
+
             const SizedBox(height: 16),
+
             FilledButton.icon(
               icon: const Icon(Icons.history),
               label: const Text('My Matches'),

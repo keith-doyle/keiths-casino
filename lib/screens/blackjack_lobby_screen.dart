@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/blackjack_ws_service.dart';
+import 'blackjack_table_screen.dart';
 
 class BlackjackLobbyScreen extends StatefulWidget {
   const BlackjackLobbyScreen({super.key});
@@ -59,7 +60,9 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
 
   Future<void> _connectAndListen() async {
     final uid = FirebaseAuth.instance.currentUser?.uid ??
-        "test_${DateTime.now().millisecondsSinceEpoch}";
+        "test_${DateTime
+            .now()
+            .millisecondsSinceEpoch}";
 
     final username = await _fetchUsernameForUid(uid);
     if (!mounted) return;
@@ -189,7 +192,8 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                       children: [
                         const Icon(Icons.person, size: 18),
                         const SizedBox(width: 8),
-                        Text("You: $yourName", style: theme.textTheme.bodyLarge),
+                        Text(
+                            "You: $yourName", style: theme.textTheme.bodyLarge),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -242,6 +246,26 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                     ),
                   );
                 },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: (_roomId == null || _players.isEmpty)
+                    ? null
+                    : () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          BlackjackTableScreen(
+                            roomId: _roomId!,
+                          ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.casino),
+                label: const Text("Enter Table"),
               ),
             ),
             if (_busy)

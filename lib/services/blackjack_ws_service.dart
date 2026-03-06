@@ -4,8 +4,15 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class BlackjackWsService {
   WebSocketChannel? _channel;
 
+  static const String _baseWs = 'ws://16.170.162.140:8000';
+// static const String _baseWs = 'ws://10.0.2.2:8000'; for local hosting
   void connectToRoom({required String roomId}) {
-    final uri = Uri.parse('ws://10.0.2.2:8000/ws/room/$roomId');
+    final uri = Uri.parse('$_baseWs/ws/room/$roomId');
+    _channel = WebSocketChannel.connect(uri);
+  }
+
+  void connectToBlackjack({required String roomId}) {
+    final uri = Uri.parse('$_baseWs/ws/blackjack/$roomId');
     _channel = WebSocketChannel.connect(uri);
   }
 
