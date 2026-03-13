@@ -153,7 +153,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       orElse: () => {},
     );
     final yourName = (yourPlayer["name"] ?? _myName).toString();
-
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return Scaffold(
       appBar: AppBar(
         title: const Text("Blackjack Lobby"),
@@ -248,19 +248,19 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: (_roomId == null || _players.isEmpty)
+                onPressed: (_roomId == null || _players.isEmpty || currentUid.isEmpty)
                     ? null
                     : () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          BlackjackTableScreen(
-                            roomId: _roomId!,
-                          ),
+                      builder: (_) => BlackjackTableScreen(
+                        roomId: _roomId!,
+                        playerId: currentUid,
+                        playerName: _myName,
+                      ),
                     ),
                   );
                 },
