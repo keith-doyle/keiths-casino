@@ -30,7 +30,6 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
   List<String> _dealerCards = [];
   int? _dealerTotal;
-
   List<Map<String, dynamic>> _players = [];
 
   String _status = 'Connecting...';
@@ -41,7 +40,6 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
   bool _gameOver = false;
   bool _dealerRevealed = false;
   bool _busy = true;
-
   bool _savedThisRound = false;
 
   @override
@@ -169,6 +167,9 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _opponents =>
+      _players.where((p) => p["id"] != widget.playerId).take(2).toList();
+
   bool get _isHost => _hostPlayerId == widget.playerId;
   bool get _isMyTurn => _turnPlayerId == widget.playerId;
 
@@ -219,6 +220,403 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     });
   }
 
+  Color _resultColor(String? result) {
+    switch (result) {
+      case 'Win':
+        return Colors.green.shade700;
+      case 'Loss':
+        return Colors.red.shade700;
+      case 'Push':
+        return Colors.orange.shade700;
+      default:
+        return Colors.black87;
+    }
+  }
+
+  Widget _badge(
+      String label, {
+        required Color fg,
+        required Color bg,
+      }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFanHand(
+      List<String> cards, {
+        required double cardWidth,
+        required double cardHeight,
+        required double overlap,
+        bool hideDealerSecond = false,
+      }) {
+    if (cards.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final visibleWidth = cardWidth + ((cards.length - 1) * overlap);
+
+    return SizedBox(
+      width: visibleWidth,
+      height: cardHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: List.generate(cards.length, (i) {
+          return Positioned(
+            left: i * overlap,
+            child: PlayingCardWidget(
+              cardId: cards[i],
+              faceDown: hideDealerSecond && i == 1,
+              width: cardWidth,
+              height: cardHeight,
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildDealerSeat() {
+    final dealerTotalText =
+    _dealerRevealed ? (_dealerTotal?.toString() ?? '-') : '??';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'Dealer',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: _buildFanHand(
+            _dealerCards,
+            cardWidth: 72,
+            cardHeight: 108,
+            overlap: 42,
+            hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Dealer total: $dealerTotalText',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOpponentSeat(
+      Map<String, dynamic> player, {
+        required bool alignLeft,
+      }) {
+    final isTurn = player["id"] == _turnPlayerId;
+    final isHost = player["id"] == _hostPlayerId;
+    final name = (player["name"] ?? 'Player').toString();
+    final cards = List<String>.from(player["cards"] ?? []);
+    final total = player["total"] ?? 0;
+    final result = player["result"]?.toString();
+
+    return Container(
+      width: 130,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: isTurn
+            ? Colors.white.withOpacity(0.18)
+            : Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isTurn ? Colors.green.shade300 : Colors.white24,
+          width: isTurn ? 1.4 : 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+        alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        children: [
+          Row(
+            children: [
+              if (!alignLeft && (isHost || isTurn)) ...[
+                if (isTurn)
+                  _badge(
+                    'TURN',
+                    fg: Colors.green.shade100,
+                    bg: Colors.green.withOpacity(0.20),
+                  ),
+                if (isTurn && isHost) const SizedBox(width: 6),
+                if (isHost)
+                  _badge(
+                    'HOST',
+                    fg: Colors.deepPurple,
+                    bg: Colors.deepPurple.withOpacity(0.18),
+                  ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  name,
+                  textAlign: alignLeft ? TextAlign.left : TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              if (alignLeft && (isHost || isTurn)) ...[
+                const SizedBox(width: 8),
+                if (isHost)
+                  _badge(
+                    'HOST',
+                    fg: Colors.deepPurple,
+                    bg: Colors.deepPurple.withOpacity(0.18),
+                  ),
+                if (isTurn && isHost) const SizedBox(width: 6),
+                if (isTurn)
+                  _badge(
+                    'TURN',
+                    fg: Colors.green.shade100,
+                    bg: Colors.green.withOpacity(0.20),
+                  ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: !alignLeft,
+            child: _buildFanHand(
+              cards,
+              cardWidth: 72,
+              cardHeight: 108,
+              overlap: 22,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Total: $total',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Result: ${result ?? "-"}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: result == null ? Colors.white : _resultColor(result),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMySeat() {
+    final me = _myPlayer;
+    final cards = List<String>.from(me?["cards"] ?? []);
+    final total = me?["total"] ?? 0;
+    final result = me?["result"]?.toString();
+    final myName = (me?["name"] ?? widget.playerName).toString();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: _isMyTurn ? Colors.green.shade300 : Colors.white24,
+          width: _isMyTurn ? 1.6 : 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$myName (YOU)',
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              if (_isHost)
+                _badge(
+                  'HOST',
+                  fg: Colors.deepPurple,
+                  bg: Colors.deepPurple.withOpacity(0.18),
+                ),
+              if (_isMyTurn) ...[
+                const SizedBox(width: 8),
+                _badge(
+                  'TURN',
+                  fg: Colors.green.shade100,
+                  bg: Colors.green.withOpacity(0.20),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildFanHand(
+                cards,
+                cardWidth: 72,
+                cardHeight: 108,
+                overlap: 36,
+              ),
+            ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Total: $total',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 18),
+              Text(
+                'Result: ${result ?? "-"}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: result == null ? Colors.white : _resultColor(result),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        _status,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    final canStart = !_gameStarted && !_busy && _isHost && _players.length >= 2;
+    final canRestart = _gameOver && !_busy && _isHost && _players.length >= 2;
+    final canPlay = _gameStarted && !_gameOver && !_busy && _isMyTurn;
+
+    ButtonStyle style(Color bg) {
+      return FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    if (!_gameStarted) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: style(const Color(0xFF3B82F6)),
+          onPressed: canStart ? _ws.sendStart : null,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(
+            _players.length < 2
+                ? 'Need 2 players to start'
+                : (_isHost ? 'Start Game' : 'Waiting for host'),
+          ),
+        ),
+      );
+    }
+
+    if (_gameOver) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: style(const Color(0xFF3B82F6)),
+          onPressed: canRestart ? _ws.sendStart : null,
+          icon: const Icon(Icons.replay),
+          label: Text(
+            _isHost ? 'Start New Round' : 'Waiting for host to restart',
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton(
+            style: style(const Color(0xFFEF4444)),
+            onPressed: canPlay ? () => _ws.sendAction("hit") : null,
+            child: const Text('Hit'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            style: style(const Color(0xFF2563EB)),
+            onPressed: canPlay ? () => _ws.sendAction("stand") : null,
+            child: const Text('Stand'),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
@@ -228,178 +626,121 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dealerTotalText = _dealerRevealed
-        ? (_dealerTotal?.toString() ?? '-')
-        : '??';
-
-    final canStart = !_gameStarted && !_busy && _isHost && _players.length >= 2;
-    final canRestart = _gameOver && !_busy && _isHost && _players.length >= 2;
-    final canPlay = _gameStarted && !_gameOver && !_busy && _isMyTurn;
+    final leftOpponent = _opponents.isNotEmpty ? _opponents[0] : null;
+    final rightOpponent = _opponents.length > 1 ? _opponents[1] : null;
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Blackjack Table (${widget.roomId})'),
+        centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Dealer',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: List.generate(
-                        _dealerCards.length,
-                            (i) => PlayingCardWidget(
-                          cardId: _dealerCards[i],
-                          faceDown: !_dealerRevealed && i != 0,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('Dealer total: $dealerTotalText'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _players.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, i) {
-                  final p = _players[i];
-                  final isYou = p["id"] == widget.playerId;
-                  final isTurn = p["id"] == _turnPlayerId;
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF14532D),
+              Color(0xFF166534),
+              Color(0xFF14532D),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final height = constraints.maxHeight;
 
-                  final cards = List<String>.from(p["cards"] ?? []);
-                  final total = p["total"] ?? 0;
-                  final result = p["result"]?.toString();
+              final sideSeatTop = height * 0.28;
+              final bottomSeatHeight = height * 0.28;
 
-                  return Card(
-                    color: isYou ? Colors.indigo.withValues(alpha: 0.08) : null,
+              return Stack(
+                children: [
+                  Positioned.fill(
                     child: Padding(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+
+                          const SizedBox(height: 6),
+
+                          _buildDealerSeat(),
+
+                          const Spacer(),
+
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  '${p["name"]}${isYou ? " (YOU)" : ""}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              if (p["id"] == _hostPlayerId)
-                                const Text(
-                                  'HOST',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.deepPurple,
-                                  ),
-                                ),
-                              if (isTurn) ...[
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'TURN',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
+
+                              _buildMySeat(),
+
+                              const SizedBox(height: 10),
+
+                              _buildStatusBar(),
+
+                              const SizedBox(height: 10),
+
+                              _buildControls(),
+
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: cards
-                                .map((c) => PlayingCardWidget(
-                              cardId: c,
-                              width: 60,
-                              height: 90,
-                            ))
-                                .toList(),
-                          ),
-                          const SizedBox(height: 8),
-                          Text('Total: $total'),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Result: ${result ?? "-"}',
-                          ),
+
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _status,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            if (!_gameStarted)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: canStart ? _ws.sendStart : null,
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(
-                    _players.length < 2
-                        ? 'Need 2 players to start'
-                        : (_isHost ? 'Start Game' : 'Waiting for host to start'),
                   ),
-                ),
-              )
-            else if (_gameOver)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: canRestart ? _ws.sendStart : null,
-                  icon: const Icon(Icons.replay),
-                  label: Text(
-                    _isHost ? 'Start New Round' : 'Waiting for host to restart',
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: canPlay ? () => _ws.sendAction("hit") : null,
-                      child: const Text('Hit'),
+                  if (leftOpponent != null)
+                    Positioned(
+                      left: 10,
+                      top: sideSeatTop,
+                      width: 140,
+                      child: _buildOpponentSeat(
+                        leftOpponent,
+                        alignLeft: true,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: canPlay ? () => _ws.sendAction("stand") : null,
-                      child: const Text('Stand'),
+
+                  if (rightOpponent != null)
+                    Positioned(
+                      right: 10,
+                      top: sideSeatTop,
+                      width: 140,
+                      child: _buildOpponentSeat(
+                        rightOpponent,
+                        alignLeft: false,
+                      ),
+                    ),
+
+                  Positioned(
+                    top: height * 0.42,
+                    left: width * 0.32,
+                    right: width * 0.32,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Text(
+                        'Room ${widget.roomId}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );

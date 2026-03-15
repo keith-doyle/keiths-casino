@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'profile_screen.dart';
 import 'matches_screen.dart';
 import 'stats_screen.dart';
-import 'Blackjack_lobby_screen.dart';
+import 'blackjack_lobby_screen.dart';
 import 'blackjack_screen.dart'; //
 
 class HomeScreen extends StatelessWidget {
