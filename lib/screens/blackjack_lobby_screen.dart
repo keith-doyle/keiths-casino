@@ -9,7 +9,12 @@ import '../services/blackjack_ws_service.dart';
 import 'blackjack_table_screen.dart';
 
 class BlackjackLobbyScreen extends StatefulWidget {
-  const BlackjackLobbyScreen({super.key});
+  final String roomId;
+
+  const BlackjackLobbyScreen({
+    super.key,
+    required this.roomId,
+  });
 
   @override
   State<BlackjackLobbyScreen> createState() => _BlackjackLobbyScreenState();
@@ -50,19 +55,14 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
         final username = (data['username'] ?? '').toString().trim();
         if (username.isNotEmpty) return username;
       }
-    } catch (_) {
-
-    }
-
+    } catch (_) {}
 
     return uid.length >= 6 ? uid.substring(0, 6) : uid;
   }
 
   Future<void> _connectAndListen() async {
     final uid = FirebaseAuth.instance.currentUser?.uid ??
-        "test_${DateTime
-            .now()
-            .millisecondsSinceEpoch}";
+        "test_${DateTime.now().millisecondsSinceEpoch}";
 
     final username = await _fetchUsernameForUid(uid);
     if (!mounted) return;
@@ -71,7 +71,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       _myName = username;
     });
 
-    final roomId = "room1"; // testing
+    final roomId = widget.roomId.trim().toUpperCase();
     _roomId = roomId;
 
     _ws.connectToRoom(roomId: roomId);
@@ -154,6 +154,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
     );
     final yourName = (yourPlayer["name"] ?? _myName).toString();
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Blackjack Lobby"),
@@ -192,8 +193,12 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                       children: [
                         const Icon(Icons.person, size: 18),
                         const SizedBox(width: 8),
-                        Text(
-                            "You: $yourName", style: theme.textTheme.bodyLarge),
+                        Expanded(
+                          child: Text(
+                            "You: $yourName",
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -251,7 +256,9 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: (_roomId == null || _players.isEmpty || currentUid.isEmpty)
+                onPressed: (_roomId == null ||
+                    _players.isEmpty ||
+                    currentUid.isEmpty)
                     ? null
                     : () {
                   Navigator.of(context).push(
