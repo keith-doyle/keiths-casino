@@ -23,6 +23,7 @@ def card_value(card_id: str) -> int:
 
 router = APIRouter(prefix="/blackjack", tags=["blackjack"])
 
+
 @dataclass
 class BlackjackState:
     deck: List[str]
@@ -208,6 +209,8 @@ class TablePlayerState:
     blackjack: bool = False
     finished: bool = False
     result: Optional[str] = None
+    bet: int = 0
+    joined_mid_round: bool = False
 
 
 @dataclass
@@ -223,6 +226,7 @@ class RoomBlackjackState:
     game_started: bool = False
     game_over: bool = False
     dealer_revealed: bool = False
+    betting_open: bool = False
 
 
 _room_blackjack_games: Dict[str, RoomBlackjackState] = {}
@@ -234,12 +238,6 @@ def get_room_game(room_id: str) -> RoomBlackjackState:
     return _room_blackjack_games[room_id]
 
 
-def _delete_room_game_if_empty(room_id: str) -> None:
-    state = _room_blackjack_games.get(room_id)
-    if state and not state.players:
-        _room_blackjack_games.pop(room_id, None)
-
-
 def _reset_player_for_round(player: TablePlayerState) -> None:
     player.cards = []
     player.stood = False
@@ -247,12 +245,23 @@ def _reset_player_for_round(player: TablePlayerState) -> None:
     player.blackjack = False
     player.finished = False
     player.result = None
+    player.bet = 0
+    player.joined_mid_round = False
+
+
+def _active_player_ids(state: RoomBlackjackState) -> List[str]:
+    ids: List[str] = []
+    for pid in state.player_order:
+        player = state.players.get(pid)
+        if player and not player.joined_mid_round:
+            ids.append(pid)
+    return ids
 
 
 def _first_active_player(state: RoomBlackjackState) -> Optional[str]:
     for pid in state.player_order:
         player = state.players.get(pid)
-        if player and not player.finished:
+        if player and not player.finished and not player.joined_mid_round:
             return pid
     return None
 
@@ -264,16 +273,16 @@ def _next_active_player_after(state: RoomBlackjackState, current_player_id: str)
     start_index = state.player_order.index(current_player_id) + 1
     for pid in state.player_order[start_index:]:
         player = state.players.get(pid)
-        if player and not player.finished:
+        if player and not player.finished and not player.joined_mid_round:
             return pid
     return None
 
 
 def _all_players_finished(state: RoomBlackjackState) -> bool:
-    active_players = [state.players[pid] for pid in state.player_order if pid in state.players]
-    if not active_players:
+    active_ids = _active_player_ids(state)
+    if not active_ids:
         return True
-    return all(player.finished for player in active_players)
+    return all(state.players[pid].finished for pid in active_ids)
 
 
 def _resolve_player_result(player_total: int, dealer_total: int) -> str:
@@ -296,7 +305,9 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomBlack
         return state
 
     player = TablePlayerState(id=player_id, name=player_name)
+
     if state.game_started and not state.game_over:
+        player.joined_mid_round = True
         player.finished = True
         player.result = "Waiting next round"
 
@@ -324,10 +335,6 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
     if state.host_player_id == player_id:
         state.host_player_id = state.player_order[0] if state.player_order else None
 
-    if state.turn_player_id == player_id:
-        next_pid = _first_active_player(state)
-        state.turn_player_id = next_pid
-
     if leaving_player:
         state.status = f"{leaving_player.name} left the table."
 
@@ -335,7 +342,11 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
         _room_blackjack_games.pop(room_id, None)
         return RoomBlackjackState(room_id=room_id)
 
-    if state.game_started and not state.game_over:
+    if state.turn_player_id == player_id:
+        next_pid = _first_active_player(state)
+        state.turn_player_id = next_pid
+
+    if state.game_started and not state.game_over and not state.betting_open:
         if _all_players_finished(state):
             _finish_room_round(state)
         elif state.turn_player_id:
@@ -343,7 +354,64 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
             if current_player:
                 state.status = f"{current_player.name}'s turn"
 
+    if state.betting_open and _all_players_have_bets(state):
+        _begin_play_after_bets(state)
+
     return state
+
+
+def set_room_bet(room_id: str, player_id: str, amount: int) -> RoomBlackjackState:
+    state = get_room_game(room_id)
+
+    if player_id not in state.players:
+        raise ValueError("Player not found.")
+
+    if not state.game_started:
+        raise ValueError("Round has not started.")
+
+    if state.game_over:
+        raise ValueError("Round already finished.")
+
+    if not state.betting_open:
+        raise ValueError("Betting is closed.")
+
+    if amount <= 0:
+        raise ValueError("Bet must be greater than 0.")
+
+    if amount not in {10, 25, 50, 100}:
+        raise ValueError("Invalid bet amount.")
+
+    player = state.players[player_id]
+
+    if player.joined_mid_round:
+        raise ValueError("You joined during this round. Wait for the next round.")
+
+    player.bet = amount
+    state.status = f"{player.name} set a bet of {amount}."
+
+    if _all_players_have_bets(state):
+        _begin_play_after_bets(state)
+
+    return state
+
+
+def _all_players_have_bets(state: RoomBlackjackState) -> bool:
+    active_ids = _active_player_ids(state)
+    if len(active_ids) < 2:
+        return False
+    return all(state.players[pid].bet > 0 for pid in active_ids)
+
+
+def _begin_play_after_bets(state: RoomBlackjackState) -> None:
+    state.betting_open = False
+
+    first_pid = _first_active_player(state)
+    if first_pid is None:
+        _finish_room_round(state)
+        return
+
+    state.turn_player_id = first_pid
+    state.status = f"{state.players[first_pid].name}'s turn"
 
 
 def start_room_game(room_id: str) -> RoomBlackjackState:
@@ -358,6 +426,7 @@ def start_room_game(room_id: str) -> RoomBlackjackState:
     state.game_started = True
     state.game_over = False
     state.dealer_revealed = False
+    state.betting_open = True
     state.turn_player_id = None
 
     for pid in active_ids:
@@ -380,13 +449,10 @@ def start_room_game(room_id: str) -> RoomBlackjackState:
             player.blackjack = True
             player.finished = True
 
-    first_pid = _first_active_player(state)
+    state.status = "Cards dealt. Place your bets."
 
-    if first_pid is None:
-        _finish_room_round(state)
-    else:
-        state.turn_player_id = first_pid
-        state.status = f"{state.players[first_pid].name}'s turn"
+    if _all_players_have_bets(state):
+        _begin_play_after_bets(state)
 
     return state
 
@@ -398,6 +464,8 @@ def room_hit(room_id: str, player_id: str) -> RoomBlackjackState:
         raise ValueError("Game has not started.")
     if state.game_over:
         raise ValueError("Round already finished.")
+    if state.betting_open:
+        raise ValueError("All players must bet before play can begin.")
     if state.turn_player_id != player_id:
         raise ValueError("It is not your turn.")
     if player_id not in state.players:
@@ -435,6 +503,8 @@ def room_stand(room_id: str, player_id: str) -> RoomBlackjackState:
         raise ValueError("Game has not started.")
     if state.game_over:
         raise ValueError("Round already finished.")
+    if state.betting_open:
+        raise ValueError("All players must bet before play can begin.")
     if state.turn_player_id != player_id:
         raise ValueError("It is not your turn.")
     if player_id not in state.players:
@@ -458,6 +528,7 @@ def room_stand(room_id: str, player_id: str) -> RoomBlackjackState:
 def _finish_room_round(state: RoomBlackjackState) -> None:
     state.turn_player_id = None
     state.dealer_revealed = True
+    state.betting_open = False
 
     while _hand_value(state.dealer) < 16:
         _deal_card_from_deck(state.deck, state.dealer)
@@ -466,7 +537,7 @@ def _finish_room_round(state: RoomBlackjackState) -> None:
 
     for pid in state.player_order:
         player = state.players.get(pid)
-        if not player:
+        if not player or player.joined_mid_round:
             continue
 
         player_total = _hand_value(player.cards)
@@ -482,6 +553,8 @@ def _room_phase(state: RoomBlackjackState) -> str:
         return "waiting"
     if state.game_over:
         return "finished"
+    if state.betting_open:
+        return "betting"
     if state.turn_player_id is None:
         return "dealer"
     return "playing"
@@ -506,17 +579,29 @@ def room_state_to_payload(room_id: str, you_id: Optional[str] = None) -> dict:
             "blackjack": player.blackjack,
             "finished": player.finished,
             "result": player.result,
+            "bet": player.bet,
+            "joined_mid_round": player.joined_mid_round,
         })
+
+    you = None
+    if you_id and you_id in state.players:
+        p = state.players[you_id]
+        you = {
+            "id": p.id,
+            "name": p.name,
+        }
 
     return {
         "type": "table_state",
         "room_id": state.room_id,
         "you_id": you_id,
+        "you": you,
         "status": state.status,
         "phase": _room_phase(state),
         "game_started": state.game_started,
         "game_over": state.game_over,
         "dealer_revealed": state.dealer_revealed,
+        "betting_open": state.betting_open,
         "dealer_cards": state.dealer,
         "dealer_total": _hand_value(state.dealer) if state.dealer_revealed else None,
         "host_player_id": state.host_player_id,

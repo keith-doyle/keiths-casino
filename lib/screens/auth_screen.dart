@@ -85,6 +85,8 @@ class _AuthScreenState extends State<AuthScreen> {
           'email': _emailC.text.trim(),
           'photoUrl': null,
           'createdAt': FieldValue.serverTimestamp(),
+          'friends': [],
+          'coins': 1000,
         });
       });
     } on FirebaseAuthException catch (e) {
@@ -154,7 +156,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     ? null
                     : () => setState(() => _isLogin = !_isLogin),
                 child: Text(
-                  _isLogin ? 'Need an account? Register' : 'Have an account? Login',
+                  _isLogin
+                      ? 'Need an account? Register'
+                      : 'Have an account? Login',
                 ),
               ),
             ],

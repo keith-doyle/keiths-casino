@@ -33,10 +33,31 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
   bool _savedThisHand = false;
 
+  int _coins = 0;
+  int _selectedBet = 10;
+
   @override
   void initState() {
     super.initState();
+    _loadCoins();
     _connectAndListen();
+  }
+
+  Future<void> _loadCoins() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      final data = doc.data();
+      if (!mounted) return;
+
+      setState(() {
+        _coins = ((data?['coins'] ?? 0) as num).toInt();
+      });
+    } catch (_) {}
   }
 
   void _connectAndListen() {
@@ -47,14 +68,12 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
     _sub = _ws.stream?.listen(
           (event) async {
-        // WebSocket channel gives dynamic; usually String
         final text = event is String ? event : event.toString();
 
         Map<String, dynamic> msg;
         try {
           msg = (jsonDecode(text) as Map).cast<String, dynamic>();
         } catch (_) {
-          // Non-JSON message
           if (!mounted) return;
           setState(() {
             _status = text;
@@ -65,15 +84,12 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
         final type = msg["type"];
 
-        // System / error messages
         if (type == "system") {
           if (!mounted) return;
           setState(() {
             _status = (msg["status"] ?? "").toString();
+            _busy = false;
           });
-
-          // After connection message, auto-deal
-          _sendAction("deal");
           return;
         }
 
@@ -86,15 +102,16 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           return;
         }
 
-        // Game state payload
         if (type == "state") {
           if (!mounted) return;
 
           setState(() {
             _gameId = msg["game_id"] as String?;
 
-            _playerCards = List<String>.from((msg["player_cards"] ?? []) as List);
-            _dealerCards = List<String>.from((msg["dealer_cards"] ?? []) as List);
+            _playerCards =
+            List<String>.from((msg["player_cards"] ?? []) as List);
+            _dealerCards =
+            List<String>.from((msg["dealer_cards"] ?? []) as List);
 
             _playerTotal = (msg["player_total"] ?? 0) as int;
             _dealerTotal = (msg["dealer_total"] ?? 0) as int;
@@ -106,15 +123,14 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             _busy = false;
           });
 
-          // Save once when hand ends
           if (_gameOver && !_savedThisHand) {
             _savedThisHand = true;
             try {
-              await _saveMatchAndStats(msg["result"]);
+              await _saveMatchStatsAndCoins(msg["result"]);
             } catch (e) {
               if (!mounted) return;
               setState(() {
-                _status = "Match/stat save failed: $e";
+                _status = "Match/stat/coin save failed: $e";
               });
             }
           }
@@ -122,7 +138,6 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           return;
         }
 
-        // Unknown message type
         if (!mounted) return;
         setState(() {
           _status = "Unknown message: $msg";
@@ -144,14 +159,20 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         });
       },
     );
-
-    // We’ll wait for the "system" message before dealing.
   }
 
   void _sendAction(String action) {
     setState(() => _busy = true);
 
     if (action == "deal") {
+      if (_selectedBet > _coins) {
+        setState(() {
+          _busy = false;
+          _status = "Not enough coins for that bet.";
+        });
+        return;
+      }
+
       _savedThisHand = false;
       _gameId = null;
     }
@@ -159,11 +180,11 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     _ws.sendJson({
       "type": "action",
       "action": action,
-      "game_id": _gameId, // can be null for deal
+      "game_id": _gameId,
     });
   }
 
-  Future<void> _saveMatchAndStats(dynamic result) async {
+  Future<void> _saveMatchStatsAndCoins(dynamic result) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
 
@@ -179,13 +200,14 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     final statsRef = userRef.collection('stats').doc('blackjack');
 
     await FirebaseFirestore.instance.runTransaction((tx) async {
-      // Reads first
+      final userSnap = await tx.get(userRef);
       final statsSnap = await tx.get(statsRef);
 
       int gamesPlayed = 0;
       int wins = 0;
       int losses = 0;
       int pushes = 0;
+      int coins = 0;
 
       if (statsSnap.exists) {
         final existing = statsSnap.data() as Map<String, dynamic>;
@@ -195,12 +217,21 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         pushes = ((existing['pushes'] ?? 0) as num).toInt();
       }
 
+      if (userSnap.exists) {
+        final userData = userSnap.data() as Map<String, dynamic>;
+        coins = ((userData['coins'] ?? 0) as num).toInt();
+      }
+
       gamesPlayed += 1;
       if (resultStr == 'Win') wins += 1;
       if (resultStr == 'Loss') losses += 1;
       if (resultStr == 'Push') pushes += 1;
 
-      // Writes after reads
+      if (resultStr == 'Win') coins += _selectedBet;
+      if (resultStr == 'Loss') coins -= _selectedBet;
+
+      if (coins < 0) coins = 0;
+
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
         'gameType': 'Blackjack',
@@ -216,7 +247,33 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         'pushes': pushes,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      tx.set(userRef, {
+        'coins': coins,
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          _coins = coins;
+        });
+      }
     });
+  }
+
+  Widget _betChip(int amount) {
+    final selected = _selectedBet == amount;
+
+    return ChoiceChip(
+      label: Text('$amount'),
+      selected: selected,
+      onSelected: _busy || (_gameId != null && !_gameOver)
+          ? null
+          : (_) {
+        setState(() {
+          _selectedBet = amount;
+        });
+      },
+    );
   }
 
   @override
@@ -232,6 +289,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     final dealerTotalText = _dealerRevealed ? _dealerTotal.toString() : '??';
 
     final canPlayMove = !_busy && !_gameOver && _gameId != null;
+    final canDeal = !_busy && (_gameId == null || _gameOver);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Blackjack')),
@@ -239,6 +297,41 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Coins: $_coins',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Bet: $_selectedBet',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              children: [
+                _betChip(10),
+                _betChip(25),
+                _betChip(50),
+                _betChip(100),
+              ],
+            ),
+            const SizedBox(height: 18),
             Center(
               child: Column(
                 children: [
@@ -267,7 +360,9 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 12,
-                    children: _playerCards.map((c) => PlayingCardWidget(cardId: c)).toList(),
+                    children: _playerCards
+                        .map((c) => PlayingCardWidget(cardId: c))
+                        .toList(),
                   ),
                   const SizedBox(height: 8),
                   Text('Your total: $_playerTotal'),
@@ -277,10 +372,12 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             const SizedBox(height: 24),
             Text('Status: $_status'),
             const SizedBox(height: 16),
-            if (_gameOver)
+            if (_gameOver || _gameId == null)
               FilledButton(
-                onPressed: _busy ? null : () => _sendAction("deal"),
-                child: _busy ? const Text('Working...') : const Text('Play again'),
+                onPressed: canDeal ? () => _sendAction("deal") : null,
+                child: _busy
+                    ? const Text('Working...')
+                    : const Text('Deal Hand'),
               )
             else
               Row(

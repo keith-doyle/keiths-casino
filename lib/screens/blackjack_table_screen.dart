@@ -35,17 +35,40 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
   String _status = 'Connecting...';
   String? _hostPlayerId;
   String? _turnPlayerId;
+  String _phase = 'waiting';
 
   bool _gameStarted = false;
   bool _gameOver = false;
   bool _dealerRevealed = false;
+  bool _bettingOpen = false;
   bool _busy = true;
   bool _savedThisRound = false;
+
+  int _coins = 0;
+  int _selectedBet = 10;
 
   @override
   void initState() {
     super.initState();
+    _loadCoins();
     _connectAndListen();
+  }
+
+  Future<void> _loadCoins() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      final data = doc.data();
+      if (!mounted) return;
+
+      setState(() {
+        _coins = ((data?['coins'] ?? 0) as num).toInt();
+      });
+    } catch (_) {}
   }
 
   void _connectAndListen() {
@@ -104,15 +127,17 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
             _status = (msg["status"] ?? "").toString();
             _hostPlayerId = msg["host_player_id"]?.toString();
             _turnPlayerId = msg["turn_player_id"]?.toString();
+            _phase = (msg["phase"] ?? "waiting").toString();
 
             _gameStarted = (msg["game_started"] ?? false) as bool;
             _gameOver = (msg["game_over"] ?? false) as bool;
             _dealerRevealed = (msg["dealer_revealed"] ?? false) as bool;
+            _bettingOpen = (msg["betting_open"] ?? false) as bool;
 
             _busy = false;
           });
 
-          if (!_gameStarted) {
+          if (!_gameStarted || _gameOver) {
             _savedThisRound = false;
           }
 
@@ -123,11 +148,11 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
             if (result == "Win" || result == "Loss" || result == "Push") {
               _savedThisRound = true;
               try {
-                await _saveMatchAndStats(result!);
+                await _saveMatchStatsAndCoins(result!);
               } catch (e) {
                 if (!mounted) return;
                 setState(() {
-                  _status = "Match/stat save failed: $e";
+                  _status = "Match/stat/coin save failed: $e";
                 });
               }
             }
@@ -172,22 +197,58 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
   bool get _isHost => _hostPlayerId == widget.playerId;
   bool get _isMyTurn => _turnPlayerId == widget.playerId;
+  bool get _joinedMidRound =>
+      ((_myPlayer?["joined_mid_round"] ?? false) as bool);
 
-  Future<void> _saveMatchAndStats(String resultStr) async {
+  int get _myBet => ((_myPlayer?["bet"] ?? 0) as num).toInt();
+
+  bool get _canStartRound =>
+      !_busy && !_gameStarted && _players.length >= 2 && _isHost;
+  bool get _canRestartRound =>
+      !_busy && _gameOver && _players.length >= 2 && _isHost;
+  bool get _canBet =>
+      !_busy && _gameStarted && !_gameOver && _bettingOpen && !_joinedMidRound;
+  bool get _canPlay =>
+      _gameStarted && !_gameOver && !_bettingOpen && !_busy && _isMyTurn;
+
+  void _sendBet(int amount) {
+    if (amount > _coins) {
+      setState(() {
+        _status = "Not enough coins for that bet.";
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedBet = amount;
+      _busy = true;
+    });
+
+    _ws.sendJson({
+      "type": "bet",
+      "amount": amount,
+    });
+  }
+
+  Future<void> _saveMatchStatsAndCoins(String resultStr) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
+
+    final myBet = ((_myPlayer?["bet"] ?? 0) as num).toInt();
 
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final matchesRef = userRef.collection('matches');
     final statsRef = userRef.collection('stats').doc('blackjack');
 
     await FirebaseFirestore.instance.runTransaction((tx) async {
+      final userSnap = await tx.get(userRef);
       final statsSnap = await tx.get(statsRef);
 
       int gamesPlayed = 0;
       int wins = 0;
       int losses = 0;
       int pushes = 0;
+      int coins = 0;
 
       if (statsSnap.exists) {
         final existing = statsSnap.data() as Map<String, dynamic>;
@@ -197,10 +258,20 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         pushes = ((existing['pushes'] ?? 0) as num).toInt();
       }
 
+      if (userSnap.exists) {
+        final userData = userSnap.data() as Map<String, dynamic>;
+        coins = ((userData['coins'] ?? 0) as num).toInt();
+      }
+
       gamesPlayed += 1;
       if (resultStr == 'Win') wins += 1;
       if (resultStr == 'Loss') losses += 1;
       if (resultStr == 'Push') pushes += 1;
+
+      if (resultStr == 'Win') coins += myBet;
+      if (resultStr == 'Loss') coins -= myBet;
+
+      if (coins < 0) coins = 0;
 
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
@@ -217,19 +288,29 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         'pushes': pushes,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      tx.set(userRef, {
+        'coins': coins,
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          _coins = coins;
+        });
+      }
     });
   }
 
   Color _resultColor(String? result) {
     switch (result) {
       case 'Win':
-        return Colors.green.shade700;
+        return Colors.green.shade300;
       case 'Loss':
-        return Colors.red.shade700;
+        return Colors.red.shade300;
       case 'Push':
-        return Colors.orange.shade700;
+        return Colors.orange.shade300;
       default:
-        return Colors.black87;
+        return Colors.white;
     }
   }
 
@@ -239,7 +320,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         required Color bg,
       }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
@@ -249,7 +330,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         style: TextStyle(
           color: fg,
           fontWeight: FontWeight.w700,
-          fontSize: 11,
+          fontSize: 10,
         ),
       ),
     );
@@ -263,7 +344,15 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         bool hideDealerSecond = false,
       }) {
     if (cards.isEmpty) {
-      return const SizedBox.shrink();
+      return SizedBox(
+        height: cardHeight,
+        child: const Center(
+          child: Text(
+            'No cards yet',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+      );
     }
 
     final visibleWidth = cardWidth + ((cards.length - 1) * overlap);
@@ -288,37 +377,55 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
+  Widget _buildRoomPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        'Room ${widget.roomId}',
+        style: const TextStyle(
+          color: Colors.white70,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+
   Widget _buildDealerSeat() {
     final dealerTotalText =
     _dealerRevealed ? (_dealerTotal?.toString() ?? '-') : '??';
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           'Dealer',
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: _buildFanHand(
             _dealerCards,
-            cardWidth: 72,
-            cardHeight: 108,
-            overlap: 42,
+            cardWidth: 64,
+            cardHeight: 96,
+            overlap: 38,
             hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
           'Dealer total: $dealerTotalText',
           style: const TextStyle(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
@@ -327,121 +434,161 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
-  Widget _buildOpponentSeat(
-      Map<String, dynamic> player, {
-        required bool alignLeft,
-      }) {
+  Widget _buildCompactInfoLine({
+    required int bet,
+    required int total,
+    required String? result,
+  }) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 4,
+      children: [
+        Text(
+          'Bet: $bet',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+          ),
+        ),
+        Text(
+          'Total: $total',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+          ),
+        ),
+        Text(
+          'Result: ${result ?? "-"}',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: result == null ? Colors.white70 : _resultColor(result),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOpponentSeat(Map<String, dynamic> player) {
     final isTurn = player["id"] == _turnPlayerId;
     final isHost = player["id"] == _hostPlayerId;
+    final joinedMidRound = (player["joined_mid_round"] ?? false) as bool;
     final name = (player["name"] ?? 'Player').toString();
     final cards = List<String>.from(player["cards"] ?? []);
-    final total = player["total"] ?? 0;
+    final total = ((player["total"] ?? 0) as num).toInt();
     final result = player["result"]?.toString();
+    final bet = ((player["bet"] ?? 0) as num).toInt();
 
     return Container(
-      width: 130,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: isTurn
-            ? Colors.white.withOpacity(0.18)
-            : Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(18),
+        color: isTurn ? Colors.white.withOpacity(0.06) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isTurn ? Colors.green.shade300 : Colors.white24,
+          color: isTurn ? Colors.green.shade300 : Colors.white12,
           width: isTurn ? 1.4 : 1,
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment:
-        alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (!alignLeft && (isHost || isTurn)) ...[
-                if (isTurn)
-                  _badge(
-                    'TURN',
-                    fg: Colors.green.shade100,
-                    bg: Colors.green.withOpacity(0.20),
-                  ),
-                if (isTurn && isHost) const SizedBox(width: 6),
-                if (isHost)
-                  _badge(
-                    'HOST',
-                    fg: Colors.deepPurple,
-                    bg: Colors.deepPurple.withOpacity(0.18),
-                  ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
+              Flexible(
                 child: Text(
                   name,
-                  textAlign: alignLeft ? TextAlign.left : TextAlign.right,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                 ),
               ),
-              if (alignLeft && (isHost || isTurn)) ...[
-                const SizedBox(width: 8),
-                if (isHost)
-                  _badge(
-                    'HOST',
-                    fg: Colors.deepPurple,
-                    bg: Colors.deepPurple.withOpacity(0.18),
-                  ),
-                if (isTurn && isHost) const SizedBox(width: 6),
-                if (isTurn)
-                  _badge(
-                    'TURN',
-                    fg: Colors.green.shade100,
-                    bg: Colors.green.withOpacity(0.20),
-                  ),
+              if (isHost) ...[
+                const SizedBox(width: 6),
+                _badge(
+                  'HOST',
+                  fg: Colors.deepPurple.shade100,
+                  bg: Colors.deepPurple.withOpacity(0.25),
+                ),
+              ],
+              if (isTurn) ...[
+                const SizedBox(width: 6),
+                _badge(
+                  'TURN',
+                  fg: Colors.green.shade100,
+                  bg: Colors.green.withOpacity(0.20),
+                ),
               ],
             ],
           ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            reverse: !alignLeft,
-            child: _buildFanHand(
-              cards,
-              cardWidth: 72,
-              cardHeight: 108,
-              overlap: 22,
+          const SizedBox(height: 8),
+          Center(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildFanHand(
+                cards,
+                cardWidth: 44,
+                cardHeight: 66,
+                overlap: 14,
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Total: $total',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+          const SizedBox(height: 8),
+          if (joinedMidRound)
+            const Text(
+              'Joining next round',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+              ),
+            )
+          else
+            _buildCompactInfoLine(
+              bet: bet,
+              total: total,
+              result: result,
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Result: ${result ?? "-"}',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: result == null ? Colors.white : _resultColor(result),
-            ),
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOpponentsRow() {
+    final opponents = _opponents;
+    if (opponents.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (opponents.length == 1) {
+      return Center(
+        child: SizedBox(
+          width: 190,
+          child: _buildOpponentSeat(opponents[0]),
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _buildOpponentSeat(opponents[0])),
+        const SizedBox(width: 10),
+        Expanded(child: _buildOpponentSeat(opponents[1])),
+      ],
     );
   }
 
   Widget _buildMySeat() {
     final me = _myPlayer;
     final cards = List<String>.from(me?["cards"] ?? []);
-    final total = me?["total"] ?? 0;
+    final total = ((me?["total"] ?? 0) as num).toInt();
     final result = me?["result"]?.toString();
     final myName = (me?["name"] ?? widget.playerName).toString();
 
@@ -449,23 +596,23 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(22),
+        color: Colors.black.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _isMyTurn ? Colors.green.shade300 : Colors.white24,
           width: _isMyTurn ? 1.6 : 1,
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Expanded(
                 child: Text(
                   '$myName (YOU)',
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 19,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
@@ -474,8 +621,8 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
               if (_isHost)
                 _badge(
                   'HOST',
-                  fg: Colors.deepPurple,
-                  bg: Colors.deepPurple.withOpacity(0.18),
+                  fg: Colors.deepPurple.shade100,
+                  bg: Colors.deepPurple.withOpacity(0.25),
                 ),
               if (_isMyTurn) ...[
                 const SizedBox(width: 8),
@@ -487,38 +634,45 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
               ],
             ],
           ),
-          const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildFanHand(
-                cards,
-                cardWidth: 72,
-                cardHeight: 108,
-                overlap: 36,
-              ),
-            ),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 4,
             children: [
               Text(
-                'Total: $total',
+                'Coins: $_coins',
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 18),
               Text(
-                'Result: ${result ?? "-"}',
-                style: TextStyle(
-                  fontSize: 15,
+                'Bet: $_myBet',
+                style: const TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: result == null ? Colors.white : _resultColor(result),
+                  color: Colors.white,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _buildFanHand(
+              cards,
+              cardWidth: 64,
+              cardHeight: 96,
+              overlap: 30,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildCompactInfoLine(
+            bet: _myBet,
+            total: total,
+            result: result,
           ),
         ],
       ),
@@ -546,16 +700,81 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
-  Widget _buildControls() {
-    final canStart = !_gameStarted && !_busy && _isHost && _players.length >= 2;
-    final canRestart = _gameOver && !_busy && _isHost && _players.length >= 2;
-    final canPlay = _gameStarted && !_gameOver && !_busy && _isMyTurn;
+  Widget _buildBetSelector() {
+    Widget chip(int amount) {
+      final selected = _selectedBet == amount;
 
+      return ChoiceChip(
+        label: Text('$amount'),
+        selected: selected,
+        onSelected: _canBet ? (_) => _sendBet(amount) : null,
+      );
+    }
+
+    String rightText;
+    if (_joinedMidRound) {
+      rightText = 'Next round';
+    } else if (_myBet > 0) {
+      rightText = 'Bet placed';
+    } else {
+      rightText = 'Choose bet';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Place your bet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                rightText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              chip(10),
+              chip(25),
+              chip(50),
+              chip(100),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls() {
     ButtonStyle style(Color bg) {
       return FilledButton.styleFrom(
         backgroundColor: bg,
         foregroundColor: Colors.white,
-        minimumSize: const Size(0, 52),
+        minimumSize: const Size(0, 50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
         ),
@@ -571,12 +790,12 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         width: double.infinity,
         child: FilledButton.icon(
           style: style(const Color(0xFF3B82F6)),
-          onPressed: canStart ? _ws.sendStart : null,
+          onPressed: _canStartRound ? _ws.sendStart : null,
           icon: const Icon(Icons.play_arrow),
           label: Text(
             _players.length < 2
                 ? 'Need 2 players to start'
-                : (_isHost ? 'Start Game' : 'Waiting for host'),
+                : (_isHost ? 'Start Round' : 'Waiting for host'),
           ),
         ),
       );
@@ -587,11 +806,23 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         width: double.infinity,
         child: FilledButton.icon(
           style: style(const Color(0xFF3B82F6)),
-          onPressed: canRestart ? _ws.sendStart : null,
+          onPressed: _canRestartRound ? _ws.sendStart : null,
           icon: const Icon(Icons.replay),
           label: Text(
             _isHost ? 'Start New Round' : 'Waiting for host to restart',
           ),
+        ),
+      );
+    }
+
+    if (_bettingOpen) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: style(const Color(0xFF0F766E)),
+          onPressed: null,
+          icon: const Icon(Icons.payments),
+          label: const Text('Waiting for all bets'),
         ),
       );
     }
@@ -601,7 +832,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         Expanded(
           child: FilledButton(
             style: style(const Color(0xFFEF4444)),
-            onPressed: canPlay ? () => _ws.sendAction("hit") : null,
+            onPressed: _canPlay ? () => _ws.sendAction("hit") : null,
             child: const Text('Hit'),
           ),
         ),
@@ -609,7 +840,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         Expanded(
           child: FilledButton(
             style: style(const Color(0xFF2563EB)),
-            onPressed: canPlay ? () => _ws.sendAction("stand") : null,
+            onPressed: _canPlay ? () => _ws.sendAction("stand") : null,
             child: const Text('Stand'),
           ),
         ),
@@ -626,8 +857,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final leftOpponent = _opponents.isNotEmpty ? _opponents[0] : null;
-    final rightOpponent = _opponents.length > 1 ? _opponents[1] : null;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       appBar: AppBar(
@@ -647,99 +877,50 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
           ),
         ),
         child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              final height = constraints.maxHeight;
-
-              final sideSeatTop = height * 0.28;
-              final bottomSeatHeight = height * 0.28;
-
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Column(
-                        children: [
-
-                          const SizedBox(height: 6),
-
-                          _buildDealerSeat(),
-
-                          const Spacer(),
-
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-
-                              _buildMySeat(),
-
-                              const SizedBox(height: 10),
-
-                              _buildStatusBar(),
-
-                              const SizedBox(height: 10),
-
-                              _buildControls(),
-
-                            ],
-                          ),
-
-                        ],
-                      ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(14, 10, 14, 14 + bottomInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(child: _buildRoomPill()),
+                const SizedBox(height: 14),
+                _buildDealerSeat(),
+                const SizedBox(height: 16),
+                _buildOpponentsRow(),
+                if (_opponents.isNotEmpty) const SizedBox(height: 16),
+                _buildMySeat(),
+                const SizedBox(height: 12),
+                if (_gameStarted && !_gameOver && _bettingOpen) ...[
+                  _buildBetSelector(),
+                  const SizedBox(height: 12),
+                ],
+                _buildStatusBar(),
+                const SizedBox(height: 12),
+                _buildControls(),
+                if (!_gameStarted) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                  ),
-                  if (leftOpponent != null)
-                    Positioned(
-                      left: 10,
-                      top: sideSeatTop,
-                      width: 140,
-                      child: _buildOpponentSeat(
-                        leftOpponent,
-                        alignLeft: true,
-                      ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24),
                     ),
-
-                  if (rightOpponent != null)
-                    Positioned(
-                      right: 10,
-                      top: sideSeatTop,
-                      width: 140,
-                      child: _buildOpponentSeat(
-                        rightOpponent,
-                        alignLeft: false,
-                      ),
-                    ),
-
-                  Positioned(
-                    top: height * 0.42,
-                    left: width * 0.32,
-                    right: width * 0.32,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Text(
-                        'Room ${widget.roomId}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                        ),
+                    child: const Text(
+                      'Host starts the round first.\nCards are dealt before bets are placed.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ],
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),

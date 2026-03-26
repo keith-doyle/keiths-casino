@@ -37,6 +37,7 @@ async def _broadcast_table_state(room_id: str):
     if not room:
         _table_room_sockets.pop(room_id, None)
 
+
 @router.websocket("/ws/blackjack/{room_id}")
 async def blackjack_ws(websocket: WebSocket, room_id: str):
     print("WS endpoint hit for room:", room_id)
@@ -152,6 +153,15 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
                         continue
 
                     blackjack.start_room_game(room_id)
+                    await _broadcast_table_state(room_id)
+                except Exception as e:
+                    await _send_error(websocket, str(e))
+                continue
+
+            if mtype == "bet":
+                try:
+                    amount = int(msg.get("amount", 0))
+                    blackjack.set_room_bet(room_id, player_id, amount)
                     await _broadcast_table_state(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))

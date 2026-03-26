@@ -106,7 +106,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       if (type == "table_state") {
         if (!mounted) return;
         setState(() {
-          _youId = (msg["you"]?["id"])?.toString();
+          _youId = msg["you_id"]?.toString();
           _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
           _status = "In room ${msg["room_id"]}";
           _busy = false;
