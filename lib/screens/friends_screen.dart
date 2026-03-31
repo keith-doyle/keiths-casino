@@ -98,30 +98,19 @@ class _FriendsScreenState extends State<FriendsScreen> {
           .collection('notifications')
           .doc(notificationId);
 
-      final existing = await requestRef.get();
-
-      if (existing.exists) {
-        final existingData = existing.data() ?? {};
-        final status = (existingData['status'] ?? '').toString();
-
-        if (status == 'pending') {
-          _show("You already have a pending friend request");
-          return;
-        }
-      }
-
       await requestRef.set({
         'type': 'friend_request',
         'fromUid': uid,
         'fromUsername': myUsername,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
 
       _controller.clear();
       _show("Friend request sent!");
     } on FirebaseException catch (e) {
-      debugPrint('FirebaseException send friend request: ${e.code} ${e.message}');
+      debugPrint(
+          'FirebaseException send friend request: ${e.code} ${e.message}');
       _show("Error sending request: ${e.message ?? e.code}");
     } catch (e) {
       debugPrint('Generic send friend request error: $e');
@@ -209,7 +198,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       leading: const Icon(Icons.person),
                       title: Text(f['username']),
                       trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
+                        icon:
+                        const Icon(Icons.delete, color: Colors.red),
                         onPressed: () => _removeFriend(f['uid']),
                       ),
                     ),

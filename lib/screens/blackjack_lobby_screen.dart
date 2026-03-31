@@ -33,12 +33,16 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
 
   String _myName = "-";
 
+  List<Map<String, dynamic>> _friends = [];
+  bool _loadingFriends = false;
+
   @override
   void initState() {
     super.initState();
 
     Future.microtask(() async {
       await _connectAndListen();
+      await _loadFriends();
     });
   }
 
@@ -58,6 +62,141 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
     } catch (_) {}
 
     return uid.length >= 6 ? uid.substring(0, 6) : uid;
+  }
+
+  Future<void> _loadFriends() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _loadingFriends = true);
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final friendIds = List<String>.from(userDoc.data()?['friends'] ?? []);
+
+      final loaded = <Map<String, dynamic>>[];
+
+      for (final fid in friendIds) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(fid).get();
+        if (!doc.exists) continue;
+
+        final data = doc.data() ?? {};
+        loaded.add({
+          'uid': fid,
+          'username': (data['username'] ?? 'Unknown').toString(),
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _friends = loaded;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to load friends')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingFriends = false);
+    }
+  }
+
+  Future<void> _sendGameInvite(Map<String, dynamic> friend) async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final roomId = _roomId;
+    if (currentUid == null || roomId == null) return;
+
+    final friendUid = (friend['uid'] ?? '').toString();
+    final friendUsername = (friend['username'] ?? 'Friend').toString();
+
+    if (friendUid.isEmpty) return;
+
+    try {
+      final notificationId = 'game_invite_${currentUid}_$roomId';
+      final notifRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(friendUid)
+          .collection('notifications')
+          .doc(notificationId);
+
+      await notifRef.set({
+        'type': 'game_invite',
+        'fromUid': currentUid,
+        'fromUsername': _myName,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'roomId': roomId,
+        'game': 'blackjack',
+      });
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invite sent to $friendUsername')),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send invite: ${e.message ?? e.code}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send invite')),
+      );
+    }
+  }
+
+  void _openInviteSheet() {
+    if (_friends.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No friends available to invite')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Invite a Friend',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _friends.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final friend = _friends[i];
+                      return ListTile(
+                        leading: const Icon(Icons.person),
+                        title: Text(friend['username']),
+                        trailing: FilledButton(
+                          onPressed: () => _sendGameInvite(friend),
+                          child: const Text('Invite'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _connectAndListen() async {
@@ -106,7 +245,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       if (type == "table_state") {
         if (!mounted) return;
         setState(() {
-          _youId = msg["you_id"]?.toString();
+          _youId = (msg["you"]?["id"])?.toString();
           _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
           _status = "In room ${msg["room_id"]}";
           _busy = false;
@@ -159,6 +298,13 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       appBar: AppBar(
         title: const Text("Blackjack Lobby"),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add_alt_1),
+            onPressed: _loadingFriends ? null : _openInviteSheet,
+            tooltip: 'Invite friend',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -215,11 +361,21 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            Text(
-              "Players",
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Text(
+                  "Players",
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _loadingFriends ? null : _openInviteSheet,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Invite'),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             Expanded(
