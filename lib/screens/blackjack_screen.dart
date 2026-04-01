@@ -36,6 +36,9 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   int _coins = 0;
   int _selectedBet = 10;
 
+  bool _betLockedForHand = false;
+  String? _resultStr;
+
   @override
   void initState() {
     super.initState();
@@ -108,10 +111,8 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           setState(() {
             _gameId = msg["game_id"] as String?;
 
-            _playerCards =
-            List<String>.from((msg["player_cards"] ?? []) as List);
-            _dealerCards =
-            List<String>.from((msg["dealer_cards"] ?? []) as List);
+            _playerCards = List<String>.from((msg["player_cards"] ?? []) as List);
+            _dealerCards = List<String>.from((msg["dealer_cards"] ?? []) as List);
 
             _playerTotal = (msg["player_total"] ?? 0) as int;
             _dealerTotal = (msg["dealer_total"] ?? 0) as int;
@@ -119,14 +120,15 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             _status = (msg["status"] ?? "").toString();
             _gameOver = (msg["game_over"] ?? false) as bool;
             _dealerRevealed = (msg["dealer_revealed"] ?? false) as bool;
+            _resultStr = msg["result"]?.toString();
 
             _busy = false;
           });
 
-          if (_gameOver && !_savedThisHand) {
+          if (_gameOver && _betLockedForHand && !_savedThisHand) {
             _savedThisHand = true;
             try {
-              await _saveMatchStatsAndCoins(msg["result"]);
+              await _saveMatchStatsAndCoins(_resultStr);
             } catch (e) {
               if (!mounted) return;
               setState(() {
@@ -165,16 +167,10 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     setState(() => _busy = true);
 
     if (action == "deal") {
-      if (_selectedBet > _coins) {
-        setState(() {
-          _busy = false;
-          _status = "Not enough coins for that bet.";
-        });
-        return;
-      }
-
       _savedThisHand = false;
       _gameId = null;
+      _betLockedForHand = false;
+      _resultStr = null;
     }
 
     _ws.sendJson({
@@ -184,12 +180,42 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     });
   }
 
+  Future<void> _confirmBetForHand() async {
+    if (_selectedBet > _coins) {
+      setState(() {
+        _status = "Not enough coins for that bet.";
+      });
+      return;
+    }
+
+    setState(() {
+      _betLockedForHand = true;
+      _status = _gameOver
+          ? "Bet locked. Saving result..."
+          : "Bet locked. Play your hand.";
+    });
+
+    if (_gameOver && !_savedThisHand) {
+      _savedThisHand = true;
+      try {
+        await _saveMatchStatsAndCoins(_resultStr);
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _status = "Match/stat/coin save failed: $e";
+        });
+      }
+    }
+  }
+
   Future<void> _saveMatchStatsAndCoins(dynamic result) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
 
     final resultStr = (result is String) ? result : null;
-    if (resultStr == null) throw Exception("Missing result from backend payload");
+    if (resultStr == null) {
+      throw Exception("Missing result from backend payload");
+    }
 
     if (resultStr != 'Win' && resultStr != 'Loss' && resultStr != 'Push') {
       throw Exception('Invalid result value: $resultStr');
@@ -199,6 +225,13 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     final matchesRef = userRef.collection('matches');
     final statsRef = userRef.collection('stats').doc('blackjack');
 
+    final bet = _selectedBet;
+    final coinDelta = resultStr == 'Win'
+        ? bet
+        : resultStr == 'Loss'
+        ? -bet
+        : 0;
+
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final userSnap = await tx.get(userRef);
       final statsSnap = await tx.get(statsRef);
@@ -207,7 +240,24 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       int wins = 0;
       int losses = 0;
       int pushes = 0;
+
+      int singleplayerGames = 0;
+      int multiplayerGames = 0;
+      int singleplayerWins = 0;
+      int multiplayerWins = 0;
+
+      int coinsWon = 0;
+      int coinsLost = 0;
+      int netCoins = 0;
+      int highestBet = 0;
+      int biggestWin = 0;
+
+      int currentWinStreak = 0;
+      int bestWinStreak = 0;
+
       int coins = 0;
+
+      bool legacyStats = false;
 
       if (statsSnap.exists) {
         final existing = statsSnap.data() as Map<String, dynamic>;
@@ -215,6 +265,36 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         wins = ((existing['wins'] ?? 0) as num).toInt();
         losses = ((existing['losses'] ?? 0) as num).toInt();
         pushes = ((existing['pushes'] ?? 0) as num).toInt();
+
+        legacyStats = !existing.containsKey('singleplayerGames') ||
+            !existing.containsKey('multiplayerGames');
+
+        if (!legacyStats) {
+          singleplayerGames =
+              ((existing['singleplayerGames'] ?? 0) as num).toInt();
+          multiplayerGames =
+              ((existing['multiplayerGames'] ?? 0) as num).toInt();
+          singleplayerWins =
+              ((existing['singleplayerWins'] ?? 0) as num).toInt();
+          multiplayerWins =
+              ((existing['multiplayerWins'] ?? 0) as num).toInt();
+
+          coinsWon = ((existing['coinsWon'] ?? 0) as num).toInt();
+          coinsLost = ((existing['coinsLost'] ?? 0) as num).toInt();
+          netCoins = ((existing['netCoins'] ?? 0) as num).toInt();
+          highestBet = ((existing['highestBet'] ?? 0) as num).toInt();
+          biggestWin = ((existing['biggestWin'] ?? 0) as num).toInt();
+
+          currentWinStreak =
+              ((existing['currentWinStreak'] ?? 0) as num).toInt();
+          bestWinStreak =
+              ((existing['bestWinStreak'] ?? 0) as num).toInt();
+        } else {
+          singleplayerGames = gamesPlayed;
+          multiplayerGames = 0;
+          singleplayerWins = wins;
+          multiplayerWins = 0;
+        }
       }
 
       if (userSnap.exists) {
@@ -223,19 +303,47 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       }
 
       gamesPlayed += 1;
-      if (resultStr == 'Win') wins += 1;
-      if (resultStr == 'Loss') losses += 1;
-      if (resultStr == 'Push') pushes += 1;
+      singleplayerGames += 1;
 
-      if (resultStr == 'Win') coins += _selectedBet;
-      if (resultStr == 'Loss') coins -= _selectedBet;
+      if (resultStr == 'Win') {
+        wins += 1;
+        singleplayerWins += 1;
+        coinsWon += bet;
+        currentWinStreak += 1;
+        if (bet > biggestWin) biggestWin = bet;
+      } else if (resultStr == 'Loss') {
+        losses += 1;
+        coinsLost += bet;
+        currentWinStreak = 0;
+      } else {
+        pushes += 1;
+        currentWinStreak = 0;
+      }
 
+      if (currentWinStreak > bestWinStreak) {
+        bestWinStreak = currentWinStreak;
+      }
+
+      if (bet > highestBet) {
+        highestBet = bet;
+      }
+
+      netCoins = coinsWon - coinsLost;
+
+      coins += coinDelta;
       if (coins < 0) coins = 0;
 
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
         'gameType': 'Blackjack',
+        'mode': 'singleplayer',
         'result': resultStr,
+        'bet': bet,
+        'coinDelta': coinDelta,
+        'playerTotal': _playerTotal,
+        'dealerTotal': _dealerTotal,
+        'roomId': null,
+        'opponentCount': 0,
         'playedAt': FieldValue.serverTimestamp(),
       });
 
@@ -245,6 +353,18 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         'wins': wins,
         'losses': losses,
         'pushes': pushes,
+        'singleplayerGames': singleplayerGames,
+        'multiplayerGames': multiplayerGames,
+        'singleplayerWins': singleplayerWins,
+        'multiplayerWins': multiplayerWins,
+        'coinsWon': coinsWon,
+        'coinsLost': coinsLost,
+        'netCoins': netCoins,
+        'highestBet': highestBet,
+        'biggestWin': biggestWin,
+        'currentWinStreak': currentWinStreak,
+        'bestWinStreak': bestWinStreak,
+        'lastPlayedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -260,19 +380,405 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     });
   }
 
-  Widget _betChip(int amount) {
-    final selected = _selectedBet == amount;
+  Color _resultColor(String? result) {
+    switch (result) {
+      case 'Win':
+        return Colors.green.shade300;
+      case 'Loss':
+        return Colors.red.shade300;
+      case 'Push':
+        return Colors.orange.shade300;
+      default:
+        return Colors.white;
+    }
+  }
 
-    return ChoiceChip(
-      label: Text('$amount'),
-      selected: selected,
-      onSelected: _busy || (_gameId != null && !_gameOver)
-          ? null
-          : (_) {
-        setState(() {
-          _selectedBet = amount;
-        });
-      },
+  Widget _badge(
+      String label, {
+        required Color fg,
+        required Color bg,
+      }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFanHand(
+      List<String> cards, {
+        required double cardWidth,
+        required double cardHeight,
+        required double overlap,
+        bool hideDealerSecond = false,
+      }) {
+    if (cards.isEmpty) {
+      return SizedBox(
+        height: cardHeight,
+        child: const Center(
+          child: Text(
+            'No cards yet',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    final visibleWidth = cardWidth + ((cards.length - 1) * overlap);
+
+    return SizedBox(
+      width: visibleWidth,
+      height: cardHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: List.generate(cards.length, (i) {
+          return Positioned(
+            left: i * overlap,
+            child: PlayingCardWidget(
+              cardId: cards[i],
+              faceDown: hideDealerSecond && i == 1,
+              width: cardWidth,
+              height: cardHeight,
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildModePill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: const Text(
+        'Singleplayer',
+        style: TextStyle(
+          color: Colors.white70,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDealerSeat() {
+    final dealerTotalText = _dealerRevealed ? _dealerTotal.toString() : '??';
+
+    return Column(
+      children: [
+        const Text(
+          'Dealer',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: _buildFanHand(
+            _dealerCards,
+            cardWidth: 64,
+            cardHeight: 96,
+            overlap: 38,
+            hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Dealer total: $dealerTotalText',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactInfoLine({
+    required int bet,
+    required int total,
+    required String? result,
+  }) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 4,
+      children: [
+        Text(
+          'Bet: $bet',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+          ),
+        ),
+        Text(
+          'Total: $total',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+          ),
+        ),
+        Text(
+          'Result: ${result ?? "-"}',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: result == null ? Colors.white70 : _resultColor(result),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMySeat() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white24,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'You',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              _badge(
+                'SOLO',
+                fg: Colors.blue.shade100,
+                bg: Colors.blue.withOpacity(0.25),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 4,
+            children: [
+              Text(
+                'Coins: $_coins',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                'Bet: $_selectedBet',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _buildFanHand(
+              _playerCards,
+              cardWidth: 64,
+              cardHeight: 96,
+              overlap: 30,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildCompactInfoLine(
+            bet: _selectedBet,
+            total: _playerTotal,
+            result: _resultStr,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        _status,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBetSelector() {
+    Widget chip(int amount) {
+      final selected = _selectedBet == amount;
+
+      return ChoiceChip(
+        label: Text('$amount'),
+        selected: selected,
+        onSelected: _busy || _betLockedForHand
+            ? null
+            : (_) {
+          setState(() {
+            _selectedBet = amount;
+          });
+        },
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Choose your bet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                _betLockedForHand ? 'Bet locked' : 'Choose after deal',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              chip(10),
+              chip(25),
+              chip(50),
+              chip(100),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    final canPlayMove =
+        !_busy && !_gameOver && _gameId != null && _betLockedForHand;
+    final canDeal = !_busy && (_gameId == null || _gameOver);
+    final canConfirmBet = !_busy && _gameId != null && !_betLockedForHand;
+
+    ButtonStyle style(Color bg) {
+      return FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    if (_gameOver || _gameId == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: style(const Color(0xFF3B82F6)),
+          onPressed: canDeal ? () => _sendAction("deal") : null,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(_busy ? 'Working...' : 'Deal Hand'),
+        ),
+      );
+    }
+
+    if (!_betLockedForHand) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: style(const Color(0xFF0F766E)),
+          onPressed: canConfirmBet ? _confirmBetForHand : null,
+          icon: const Icon(Icons.payments),
+          label: const Text('Confirm Bet'),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton(
+            style: style(const Color(0xFFEF4444)),
+            onPressed: canPlayMove ? () => _sendAction("hit") : null,
+            child: const Text('Hit'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            style: style(const Color(0xFF2563EB)),
+            onPressed: canPlayMove ? () => _sendAction("stand") : null,
+            child: const Text('Stand'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -285,115 +791,69 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dealerTotalText = _dealerRevealed ? _dealerTotal.toString() : '??';
-
-    final canPlayMove = !_busy && !_gameOver && _gameId != null;
-    final canDeal = !_busy && (_gameId == null || _gameOver);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Blackjack')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Coins: $_coins',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      'Bet: $_selectedBet',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
+      appBar: AppBar(
+        title: const Text('Blackjack'),
+        centerTitle: true,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF14532D),
+              Color(0xFF166534),
+              Color(0xFF14532D),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(14, 10, 14, 14 + bottomInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _betChip(10),
-                _betChip(25),
-                _betChip(50),
-                _betChip(100),
+                Center(child: _buildModePill()),
+                const SizedBox(height: 14),
+                _buildDealerSeat(),
+                const SizedBox(height: 16),
+                _buildMySeat(),
+                const SizedBox(height: 12),
+                if (_gameId != null && !_gameOver) ...[
+                  _buildBetSelector(),
+                  const SizedBox(height: 12),
+                ],
+                _buildStatusBar(),
+                const SizedBox(height: 12),
+                _buildControls(),
+                if (_gameId == null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Text(
+                      'Deal first to see your cards.\nThen choose and confirm your bet before playing.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 18),
-            Center(
-              child: Column(
-                children: [
-                  Text('Dealer', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    children: List.generate(
-                      _dealerCards.length,
-                          (i) => PlayingCardWidget(
-                        cardId: _dealerCards[i],
-                        faceDown: !_dealerRevealed && i != 0,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Dealer total: $dealerTotalText'),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Center(
-              child: Column(
-                children: [
-                  Text('You', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    children: _playerCards
-                        .map((c) => PlayingCardWidget(cardId: c))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Your total: $_playerTotal'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Status: $_status'),
-            const SizedBox(height: 16),
-            if (_gameOver || _gameId == null)
-              FilledButton(
-                onPressed: canDeal ? () => _sendAction("deal") : null,
-                child: _busy
-                    ? const Text('Working...')
-                    : const Text('Deal Hand'),
-              )
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  FilledButton(
-                    onPressed: canPlayMove ? () => _sendAction("hit") : null,
-                    child: const Text('Hit'),
-                  ),
-                  FilledButton(
-                    onPressed: canPlayMove ? () => _sendAction("stand") : null,
-                    child: const Text('Stand'),
-                  ),
-                ],
-              ),
-          ],
+          ),
         ),
       ),
     );

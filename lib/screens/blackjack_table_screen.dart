@@ -235,6 +235,16 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     if (uid == null) throw Exception("Not signed in");
 
     final myBet = ((_myPlayer?["bet"] ?? 0) as num).toInt();
+    final myTotal = (((_myPlayer?["total"] ?? 0) as num).toInt());
+    final dealerTotal = _dealerTotal ?? 0;
+    final opponentCount =
+        _players.where((p) => p["id"] != widget.playerId).length;
+
+    final coinDelta = resultStr == 'Win'
+        ? myBet
+        : resultStr == 'Loss'
+        ? -myBet
+        : 0;
 
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final matchesRef = userRef.collection('matches');
@@ -248,7 +258,24 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       int wins = 0;
       int losses = 0;
       int pushes = 0;
+
+      int singleplayerGames = 0;
+      int multiplayerGames = 0;
+      int singleplayerWins = 0;
+      int multiplayerWins = 0;
+
+      int coinsWon = 0;
+      int coinsLost = 0;
+      int netCoins = 0;
+      int highestBet = 0;
+      int biggestWin = 0;
+
+      int currentWinStreak = 0;
+      int bestWinStreak = 0;
+
       int coins = 0;
+
+      bool legacyStats = false;
 
       if (statsSnap.exists) {
         final existing = statsSnap.data() as Map<String, dynamic>;
@@ -256,6 +283,36 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         wins = ((existing['wins'] ?? 0) as num).toInt();
         losses = ((existing['losses'] ?? 0) as num).toInt();
         pushes = ((existing['pushes'] ?? 0) as num).toInt();
+
+        legacyStats = !existing.containsKey('singleplayerGames') ||
+            !existing.containsKey('multiplayerGames');
+
+        if (!legacyStats) {
+          singleplayerGames =
+              ((existing['singleplayerGames'] ?? 0) as num).toInt();
+          multiplayerGames =
+              ((existing['multiplayerGames'] ?? 0) as num).toInt();
+          singleplayerWins =
+              ((existing['singleplayerWins'] ?? 0) as num).toInt();
+          multiplayerWins =
+              ((existing['multiplayerWins'] ?? 0) as num).toInt();
+
+          coinsWon = ((existing['coinsWon'] ?? 0) as num).toInt();
+          coinsLost = ((existing['coinsLost'] ?? 0) as num).toInt();
+          netCoins = ((existing['netCoins'] ?? 0) as num).toInt();
+          highestBet = ((existing['highestBet'] ?? 0) as num).toInt();
+          biggestWin = ((existing['biggestWin'] ?? 0) as num).toInt();
+
+          currentWinStreak =
+              ((existing['currentWinStreak'] ?? 0) as num).toInt();
+          bestWinStreak =
+              ((existing['bestWinStreak'] ?? 0) as num).toInt();
+        } else {
+          singleplayerGames = 0;
+          multiplayerGames = gamesPlayed;
+          singleplayerWins = 0;
+          multiplayerWins = wins;
+        }
       }
 
       if (userSnap.exists) {
@@ -264,19 +321,47 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       }
 
       gamesPlayed += 1;
-      if (resultStr == 'Win') wins += 1;
-      if (resultStr == 'Loss') losses += 1;
-      if (resultStr == 'Push') pushes += 1;
+      multiplayerGames += 1;
 
-      if (resultStr == 'Win') coins += myBet;
-      if (resultStr == 'Loss') coins -= myBet;
+      if (resultStr == 'Win') {
+        wins += 1;
+        multiplayerWins += 1;
+        coinsWon += myBet;
+        currentWinStreak += 1;
+        if (myBet > biggestWin) biggestWin = myBet;
+      } else if (resultStr == 'Loss') {
+        losses += 1;
+        coinsLost += myBet;
+        currentWinStreak = 0;
+      } else {
+        pushes += 1;
+        currentWinStreak = 0;
+      }
 
+      if (currentWinStreak > bestWinStreak) {
+        bestWinStreak = currentWinStreak;
+      }
+
+      if (myBet > highestBet) {
+        highestBet = myBet;
+      }
+
+      netCoins = coinsWon - coinsLost;
+
+      coins += coinDelta;
       if (coins < 0) coins = 0;
 
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
         'gameType': 'Blackjack Multiplayer',
+        'mode': 'multiplayer',
         'result': resultStr,
+        'bet': myBet,
+        'coinDelta': coinDelta,
+        'playerTotal': myTotal,
+        'dealerTotal': dealerTotal,
+        'roomId': widget.roomId,
+        'opponentCount': opponentCount,
         'playedAt': FieldValue.serverTimestamp(),
       });
 
@@ -286,6 +371,18 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         'wins': wins,
         'losses': losses,
         'pushes': pushes,
+        'singleplayerGames': singleplayerGames,
+        'multiplayerGames': multiplayerGames,
+        'singleplayerWins': singleplayerWins,
+        'multiplayerWins': multiplayerWins,
+        'coinsWon': coinsWon,
+        'coinsLost': coinsLost,
+        'netCoins': netCoins,
+        'highestBet': highestBet,
+        'biggestWin': biggestWin,
+        'currentWinStreak': currentWinStreak,
+        'bestWinStreak': bestWinStreak,
+        'lastPlayedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
