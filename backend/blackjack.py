@@ -253,8 +253,11 @@ def _active_player_ids(state: RoomBlackjackState) -> List[str]:
     ids: List[str] = []
     for pid in state.player_order:
         player = state.players.get(pid)
-        if player and not player.joined_mid_round:
-            ids.append(pid)
+        if not player:
+            continue
+        if player.joined_mid_round:
+            continue
+        ids.append(pid)
     return ids
 
 
@@ -346,6 +349,10 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
         next_pid = _first_active_player(state)
         state.turn_player_id = next_pid
 
+    if state.betting_open and _all_players_have_bets(state):
+        _begin_play_after_bets(state)
+        return state
+
     if state.game_started and not state.game_over and not state.betting_open:
         if _all_players_finished(state):
             _finish_room_round(state)
@@ -353,9 +360,11 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
             current_player = state.players.get(state.turn_player_id)
             if current_player:
                 state.status = f"{current_player.name}'s turn"
-
-    if state.betting_open and _all_players_have_bets(state):
-        _begin_play_after_bets(state)
+        else:
+            next_pid = _first_active_player(state)
+            state.turn_player_id = next_pid
+            if next_pid:
+                state.status = f"{state.players[next_pid].name}'s turn"
 
     return state
 
@@ -387,10 +396,20 @@ def set_room_bet(room_id: str, player_id: str, amount: int) -> RoomBlackjackStat
         raise ValueError("You joined during this round. Wait for the next round.")
 
     player.bet = amount
-    state.status = f"{player.name} set a bet of {amount}."
+
+    remaining = [
+        pid for pid in _active_player_ids(state)
+        if (state.players.get(pid).bet if state.players.get(pid) else 0) <= 0
+    ]
 
     if _all_players_have_bets(state):
+        state.status = "All bets placed."
         _begin_play_after_bets(state)
+    else:
+        if remaining:
+            state.status = f"{player.name} set a bet of {amount}. Waiting for {len(remaining)} player(s)."
+        else:
+            state.status = f"{player.name} set a bet of {amount}."
 
     return state
 
@@ -399,7 +418,15 @@ def _all_players_have_bets(state: RoomBlackjackState) -> bool:
     active_ids = _active_player_ids(state)
     if len(active_ids) < 2:
         return False
-    return all(state.players[pid].bet > 0 for pid in active_ids)
+
+    for pid in active_ids:
+        player = state.players.get(pid)
+        if not player:
+            return False
+        if player.bet <= 0:
+            return False
+
+    return True
 
 
 def _begin_play_after_bets(state: RoomBlackjackState) -> None:
@@ -449,7 +476,15 @@ def start_room_game(room_id: str) -> RoomBlackjackState:
             player.blackjack = True
             player.finished = True
 
-    state.status = "Cards dealt. Place your bets."
+    joined_waiting = [
+        p.name for p in state.players.values()
+        if p.joined_mid_round
+    ]
+
+    if joined_waiting:
+        state.status = "Cards dealt. Place your bets."
+    else:
+        state.status = "Cards dealt. Place your bets."
 
     if _all_players_have_bets(state):
         _begin_play_after_bets(state)

@@ -1,7 +1,6 @@
-# ws_room.py
 import json
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
@@ -18,19 +17,30 @@ class Player:
 @dataclass
 class Room:
     id: str
+    host_player_id: str = ""
     sockets: Dict[WebSocket, str] = field(default_factory=dict)
     players: Dict[str, Player] = field(default_factory=dict)
 
 
 _rooms: Dict[str, Room] = {}
 
+
 def room_exists(room_id: str) -> bool:
     return room_id in _rooms
+
 
 def _room(room_id: str) -> Optional[Room]:
     return _rooms.get(room_id)
 
-def create_room(room_id: str) -> Room:
+
+def get_room_host_player_id(room_id: str) -> Optional[str]:
+    room = _rooms.get(room_id)
+    if room is None:
+      return None
+    return room.host_player_id or None
+
+
+def create_room(room_id: str, host_player_id: str = "") -> Room:
     room_id = room_id.strip().upper()
 
     if not room_id:
@@ -39,16 +49,23 @@ def create_room(room_id: str) -> Room:
     if room_id in _rooms:
         raise ValueError("Room already exists.")
 
-    room = Room(id=room_id)
+    room = Room(
+        id=room_id,
+        host_player_id=host_player_id.strip(),
+    )
     _rooms[room_id] = room
     return room
 
+
 class CreateRoomRequest(BaseModel):
     room_id: str
+    host_player_id: str | None = None
+
 
 @router.post("/rooms/create")
 def create_room_http(body: CreateRoomRequest):
     room_id = body.room_id.strip().upper()
+    host_player_id = (body.host_player_id or "").strip()
 
     if not room_id:
         raise HTTPException(status_code=400, detail="Room id is required.")
@@ -56,16 +73,24 @@ def create_room_http(body: CreateRoomRequest):
     if room_id in _rooms:
         raise HTTPException(status_code=409, detail="Room already exists.")
 
-    create_room(room_id)
+    create_room(room_id, host_player_id=host_player_id)
 
-    return {"ok": True, "room_id": room_id}
+    return {
+        "ok": True,
+        "room_id": room_id,
+        "host_player_id": host_player_id,
+    }
+
 
 @router.get("/rooms/{room_id}/exists")
 def room_exists_http(room_id: str):
     room_id = room_id.strip().upper()
+    room = _rooms.get(room_id)
+
     return {
         "room_id": room_id,
-        "exists": room_exists(room_id),
+        "exists": room is not None,
+        "host_player_id": room.host_player_id if room else None,
     }
 
 
@@ -82,6 +107,7 @@ def _payload_table_state(room: Room, you_id: Optional[str]) -> dict:
         "room_id": room.id,
         "you": you,
         "players": players_list,
+        "host_player_id": room.host_player_id,
     }
 
 
@@ -149,12 +175,19 @@ async def room_ws(ws: WebSocket, room_id: str):
             room.players[player_id] = Player(id=player_id, name=player_name)
             room.sockets[ws] = player_id
 
+            if not room.host_player_id:
+                room.host_player_id = player_id
+
             await _broadcast(room)
 
     except WebSocketDisconnect:
         pid = room.sockets.pop(ws, "")
         if pid and pid in room.players:
             room.players.pop(pid, None)
+
+        if pid and room.host_player_id == pid:
+            remaining_ids = list(room.players.keys())
+            room.host_player_id = remaining_ids[0] if remaining_ids else ""
 
         await _broadcast(room)
 

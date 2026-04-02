@@ -5,6 +5,7 @@ from typing import Dict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import blackjack
+import ws_room
 
 router = APIRouter()
 
@@ -17,6 +18,18 @@ def _get_table_room(room_id: str) -> Dict[WebSocket, str]:
     return _table_room_sockets[room_id]
 
 
+def _sync_table_host_from_lobby(room_id: str):
+    state = blackjack.get_room_game(room_id)
+    lobby_host_player_id = ws_room.get_room_host_player_id(room_id)
+
+    if lobby_host_player_id and lobby_host_player_id in state.players:
+        state.host_player_id = lobby_host_player_id
+    elif state.player_order:
+        state.host_player_id = state.player_order[0]
+    else:
+        state.host_player_id = None
+
+
 async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
     payload = {"type": "error", "status": status}
     if extra:
@@ -25,6 +38,7 @@ async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
 
 
 async def _broadcast_table_state(room_id: str):
+    _sync_table_host_from_lobby(room_id)
     room = _get_table_room(room_id)
 
     for ws, pid in list(room.items()):
@@ -137,6 +151,7 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
                 blackjack.add_room_player(room_id, player_id, player_name)
                 room[websocket] = player_id
 
+                _sync_table_host_from_lobby(room_id)
                 await _broadcast_table_state(room_id)
                 continue
 
@@ -147,12 +162,15 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
 
             if mtype == "start":
                 try:
+                    _sync_table_host_from_lobby(room_id)
                     state = blackjack.get_room_game(room_id)
+
                     if state.host_player_id != player_id:
                         await _send_error(websocket, "Only the host can start the game.")
                         continue
 
                     blackjack.start_room_game(room_id)
+                    _sync_table_host_from_lobby(room_id)
                     await _broadcast_table_state(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
@@ -162,6 +180,7 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
                 try:
                     amount = int(msg.get("amount", 0))
                     blackjack.set_room_bet(room_id, player_id, amount)
+                    _sync_table_host_from_lobby(room_id)
                     await _broadcast_table_state(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
@@ -179,6 +198,7 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
                         await _send_error(websocket, "Unknown action.", {"action": action})
                         continue
 
+                    _sync_table_host_from_lobby(room_id)
                     await _broadcast_table_state(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
@@ -192,6 +212,7 @@ async def blackjack_table_ws(websocket: WebSocket, room_id: str):
         if player_id:
             blackjack.remove_room_player(room_id, player_id)
 
+        _sync_table_host_from_lobby(room_id)
         await _broadcast_table_state(room_id)
 
         if not room:

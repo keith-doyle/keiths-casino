@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -30,6 +31,14 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
   }
 
   Future<void> _createLobby() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be signed in to create a room.')),
+      );
+      return;
+    }
+
     setState(() => _busy = true);
 
     try {
@@ -40,7 +49,10 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
         final res = await http.post(
           Uri.parse('$_baseHttp/rooms/create'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'room_id': roomCode}),
+          body: jsonEncode({
+            'room_id': roomCode,
+            'host_player_id': currentUid,
+          }),
         );
 
         if (res.statusCode == 200) {

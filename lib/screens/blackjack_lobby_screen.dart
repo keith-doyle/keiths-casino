@@ -71,13 +71,15 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
     setState(() => _loadingFriends = true);
 
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final userDoc =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final friendIds = List<String>.from(userDoc.data()?['friends'] ?? []);
 
       final loaded = <Map<String, dynamic>>[];
 
       for (final fid in friendIds) {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(fid).get();
+        final doc =
+        await FirebaseFirestore.instance.collection('users').doc(fid).get();
         if (!doc.exists) continue;
 
         final data = doc.data() ?? {};
@@ -86,6 +88,11 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
           'username': (data['username'] ?? 'Unknown').toString(),
         });
       }
+
+      loaded.sort((a, b) => a['username']
+          .toString()
+          .toLowerCase()
+          .compareTo(b['username'].toString().toLowerCase()));
 
       if (!mounted) return;
       setState(() {
@@ -180,12 +187,19 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, i) {
                       final friend = _friends[i];
+                      final friendUid = (friend['uid'] ?? '').toString();
+                      final alreadyHere =
+                      _players.any((p) => (p["id"] ?? "").toString() == friendUid);
+
                       return ListTile(
                         leading: const Icon(Icons.person),
                         title: Text(friend['username']),
+                        subtitle:
+                        alreadyHere ? const Text('Already in lobby') : null,
                         trailing: FilledButton(
-                          onPressed: () => _sendGameInvite(friend),
-                          child: const Text('Invite'),
+                          onPressed:
+                          alreadyHere ? null : () => _sendGameInvite(friend),
+                          child: Text(alreadyHere ? 'Here' : 'Invite'),
                         ),
                       );
                     },
@@ -276,6 +290,130 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
     });
   }
 
+  String _compactStatusText() {
+    if (_busy) return 'Joining lobby...';
+    if (_players.length < 2) return 'Waiting for more players';
+    return 'Ready to enter table';
+  }
+
+  Color _compactStatusColor() {
+    if (_busy) return Colors.orange.shade300;
+    if (_players.length < 2) return Colors.orange.shade300;
+    return Colors.green.shade300;
+  }
+
+  String _hostName() {
+    if (_players.isEmpty) return '-';
+    final host = _players.first;
+    return (host["name"] ?? '-').toString();
+  }
+
+  bool get _isHost {
+    if (_youId == null || _players.isEmpty) return false;
+    return (_players.first["id"] ?? '').toString() == _youId;
+  }
+
+  Widget _buildInfoPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _compactStatusColor().withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _compactStatusColor().withOpacity(0.55),
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            _compactStatusText(),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: _compactStatusColor(),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _players.length < 2
+                ? 'Minimum 2 players are needed before starting.'
+                : 'Everyone is ready to move into the blackjack table.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerTile(Map<String, dynamic> p, int index) {
+    final pid = (p["id"] ?? "").toString();
+    final name = (p["name"] ?? pid).toString();
+    final isYou = (_youId != null && pid == _youId);
+    final isHost = index == 0;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.account_circle),
+        title: Text(name),
+        subtitle: Text(isHost ? 'Host' : 'Player'),
+        trailing: Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (isHost)
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'HOST',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.deepPurple,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            if (isYou)
+              const Text(
+                "YOU",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
@@ -286,12 +424,6 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    final yourPlayer = _players.firstWhere(
-          (p) => p["id"] == _youId,
-      orElse: () => {},
-    );
-    final yourName = (yourPlayer["name"] ?? _myName).toString();
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
@@ -327,35 +459,19 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Multiplayer Lobby",
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        const Icon(Icons.person, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "You: $yourName",
-                            style: theme.textTheme.bodyLarge,
-                          ),
+                        _buildInfoPill('Players: ${_players.length}'),
+                        _buildInfoPill(
+                          _isHost ? 'Host: You' : 'Host: ${_hostName()}',
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      _status,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: _status.startsWith("In room")
-                            ? Colors.green[700]
-                            : Colors.grey[700],
-                      ),
-                    ),
+                    _buildStatusCard(theme),
                   ],
                 ),
               ),
@@ -379,33 +495,18 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: ListView.builder(
+              child: _players.isEmpty
+                  ? Center(
+                child: Text(
+                  _busy ? 'Joining lobby...' : 'No players in lobby',
+                  style: theme.textTheme.bodyLarge,
+                ),
+              )
+                  : ListView.builder(
                 itemCount: _players.length,
                 itemBuilder: (context, i) {
                   final p = _players[i];
-                  final pid = (p["id"] ?? "").toString();
-                  final name = (p["name"] ?? pid).toString();
-                  final isYou = (_youId != null && pid == _youId);
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ListTile(
-                      leading: const Icon(Icons.account_circle),
-                      title: Text(name),
-                      trailing: isYou
-                          ? const Text(
-                        "YOU",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple,
-                        ),
-                      )
-                          : null,
-                    ),
-                  );
+                  return _buildPlayerTile(p, i);
                 },
               ),
             ),
@@ -428,7 +529,9 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
                   );
                 },
                 icon: const Icon(Icons.casino),
-                label: const Text("Enter Table"),
+                label: Text(
+                  _players.length < 2 ? "Enter Table" : "Enter Table",
+                ),
               ),
             ),
             if (_busy)
