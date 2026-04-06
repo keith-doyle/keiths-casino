@@ -9,13 +9,15 @@ import 'blackjack_room_screen.dart';
 import 'blackjack_screen.dart';
 import 'friends_screen.dart';
 import 'notifications_screen.dart';
+import 'poker_table_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final user = FirebaseAuth.instance.currentUser!;
+    final uid = user.uid;
     final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
 
     return Scaffold(
@@ -51,6 +53,8 @@ class HomeScreen extends StatelessWidget {
         builder: (context, snap) {
           final data = snap.data?.data();
           final coins = ((data?['coins'] ?? 0) as num).toInt();
+          final username =
+          (data?['username'] ?? user.displayName ?? 'Player').toString();
 
           return Center(
             child: Column(
@@ -90,6 +94,22 @@ class HomeScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const BlackjackScreen()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.table_bar),
+                  label: const Text('Poker Table Test'),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PokerTableScreen(
+                          roomId: 'POKER1',
+                          playerId: uid,
+                          playerName: username,
+                        ),
+                      ),
                     );
                   },
                 ),
