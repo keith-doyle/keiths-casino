@@ -21,6 +21,11 @@ class BlackjackWsService {
     _channel = WebSocketChannel.connect(uri);
   }
 
+  void connectToPokerTable({required String roomId}) {
+    final uri = Uri.parse('$_baseWs/ws/poker_table/$roomId');
+    _channel = WebSocketChannel.connect(uri);
+  }
+
   Stream<dynamic>? get stream => _channel?.stream;
 
   void join({required String playerId, required String playerName}) {
