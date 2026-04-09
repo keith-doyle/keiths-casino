@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/blackjack_ws_service.dart';
+import '../widgets/playing_card_widget.dart';
 
 class PokerTableScreen extends StatefulWidget {
   final String roomId;
@@ -30,6 +30,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   String _status = 'Connecting...';
   String? _hostPlayerId;
   bool _busy = true;
+  bool _gameStarted = false;
+  String _phase = 'waiting';
 
   @override
   void initState() {
@@ -72,12 +74,23 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           return;
         }
 
+        if (type == "error") {
+          if (!mounted) return;
+          setState(() {
+            _status = (msg["status"] ?? "Unknown error").toString();
+            _busy = false;
+          });
+          return;
+        }
+
         if (type == "table_state") {
           if (!mounted) return;
           setState(() {
             _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
             _hostPlayerId = msg["host_player_id"]?.toString();
             _status = (msg["status"] ?? "Connected").toString();
+            _gameStarted = (msg["game_started"] ?? false) as bool;
+            _phase = (msg["phase"] ?? "waiting").toString();
             _busy = false;
           });
           return;
@@ -108,6 +121,16 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
   bool get _isHost => _hostPlayerId == widget.playerId;
 
+  Map<String, dynamic>? get _myPlayer {
+    try {
+      return _players.firstWhere((p) => (p["id"] ?? "").toString() == widget.playerId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
+
   Widget _buildInfoPill(String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -122,6 +145,45 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+
+  Widget _buildFanHand(
+      List<String> cards, {
+        required double cardWidth,
+        required double cardHeight,
+        required double overlap,
+      }) {
+    if (cards.isEmpty) {
+      return SizedBox(
+        height: cardHeight,
+        child: const Center(
+          child: Text(
+            'No cards yet',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    final visibleWidth = cardWidth + ((cards.length - 1) * overlap);
+
+    return SizedBox(
+      width: visibleWidth,
+      height: cardHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: List.generate(cards.length, (i) {
+          return Positioned(
+            left: i * overlap,
+            child: PlayingCardWidget(
+              cardId: cards[i],
+              width: cardWidth,
+              height: cardHeight,
+            ),
+          );
+        }),
       ),
     );
   }
@@ -178,6 +240,32 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     );
   }
 
+  Widget _buildControls() {
+    if (_gameStarted) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.check_circle_outline),
+          label: Text('Round Active • ${_phase.toUpperCase()}'),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
+        icon: const Icon(Icons.play_arrow),
+        label: Text(
+          _players.length < 2
+              ? 'Need 2 players to start'
+              : (_isHost ? 'Start Round' : 'Waiting for host'),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
@@ -187,8 +275,6 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final signedInUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Poker Table (${widget.roomId})'),
@@ -220,6 +306,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     _buildInfoPill('Room ${widget.roomId}'),
                     _buildInfoPill('Players: ${_players.length}'),
                     _buildInfoPill(_isHost ? 'Host: You' : 'Host assigned'),
+                    _buildInfoPill('Phase: ${_phase.toUpperCase()}'),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -244,6 +331,38 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Your Hole Cards',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _buildFanHand(
+                          _myCards,
+                          cardWidth: 64,
+                          cardHeight: 96,
+                          overlap: 30,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Expanded(
                   child: _players.isEmpty
                       ? Center(
@@ -263,14 +382,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     },
                   ),
                 ),
-                if (signedInUid.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'No signed-in user detected.',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ),
+                const SizedBox(height: 12),
+                _buildControls(),
               ],
             ),
           ),

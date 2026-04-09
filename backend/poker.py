@@ -1,5 +1,15 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+import random
+
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+SUITS = ["H", "D", "C", "S"]
+
+
+def _new_deck() -> List[str]:
+    deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
+    random.shuffle(deck)
+    return deck
 
 
 @dataclass
@@ -17,6 +27,9 @@ class RoomPokerState:
     player_order: List[str] = field(default_factory=list)
     host_player_id: Optional[str] = None
     status: str = "Waiting for players"
+    game_started: bool = False
+    phase: str = "waiting"
+    deck: List[str] = field(default_factory=list)
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -32,6 +45,7 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPoker
     state = get_room_poker_game(room_id)
 
     if player_id in state.players:
+        state.players[player_id].name = player_name or state.players[player_id].name
         return state
 
     player = PokerPlayerState(id=player_id, name=player_name)
@@ -60,6 +74,47 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
     if leaving:
         state.status = f"{leaving.name} left the table."
 
+    if not state.players:
+        _room_poker_games.pop(room_id, None)
+        return RoomPokerState(room_id=room_id)
+
+    if len(state.player_order) < 2:
+        state.game_started = False
+        state.phase = "waiting"
+        state.deck = []
+        for player in state.players.values():
+            player.cards = []
+            player.folded = False
+        state.status = "Waiting for players"
+
+    return state
+
+
+def start_room_game(room_id: str) -> RoomPokerState:
+    state = get_room_poker_game(room_id)
+
+    if len(state.player_order) < 2:
+        raise ValueError("At least 2 players are required to start.")
+
+    state.deck = _new_deck()
+    state.game_started = True
+    state.phase = "preflop"
+    state.status = "Round started. Hole cards dealt."
+
+    for pid in state.player_order:
+        player = state.players[pid]
+        player.cards = []
+        player.folded = False
+
+    for _ in range(2):
+        for pid in state.player_order:
+            player = state.players.get(pid)
+            if not player:
+                continue
+            if not state.deck:
+                state.deck = _new_deck()
+            player.cards.append(state.deck.pop())
+
     return state
 
 
@@ -73,6 +128,7 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
             {
                 "id": p.id,
                 "name": p.name,
+                "cards": p.cards if p.id == you_id else [],
                 "card_count": len(p.cards),
                 "folded": p.folded,
                 "is_you": p.id == you_id,
@@ -81,4 +137,6 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         ],
         "host_player_id": state.host_player_id,
         "status": state.status,
+        "game_started": state.game_started,
+        "phase": state.phase,
     }

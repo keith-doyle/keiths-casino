@@ -16,6 +16,13 @@ def _get_room(room_id: str) -> Dict[WebSocket, str]:
     return _table_room_sockets[room_id]
 
 
+async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
+    payload = {"type": "error", "status": status}
+    if extra:
+        payload.update(extra)
+    await ws.send_text(json.dumps(payload))
+
+
 async def _broadcast(room_id: str):
     room = _get_room(room_id)
 
@@ -50,20 +57,51 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
 
             try:
                 msg = json.loads(raw)
+                if not isinstance(msg, dict):
+                    await _send_error(websocket, "Invalid JSON payload.")
+                    continue
             except Exception:
+                await _send_error(websocket, "Invalid JSON.", {"raw": raw})
                 continue
 
             mtype = msg.get("type")
 
             if mtype == "join":
-                player_id = msg.get("player_id")
-                player_name = msg.get("player_name") or player_id
+                player_id = (msg.get("player_id") or "").strip()
+                player_name = (msg.get("player_name") or "").strip()
+
+                if not player_id:
+                    await _send_error(websocket, "Missing player_id.")
+                    continue
+
+                if not player_name:
+                    player_name = player_id[:6]
 
                 poker.add_room_player(room_id, player_id, player_name)
                 room[websocket] = player_id
 
                 await _broadcast(room_id)
                 continue
+
+            player_id = room.get(websocket, "")
+            if not player_id:
+                await _send_error(websocket, "Expected join message first.", {"received": msg})
+                continue
+
+            if mtype == "start":
+                try:
+                    state = poker.get_room_poker_game(room_id)
+                    if state.host_player_id != player_id:
+                        await _send_error(websocket, "Only the host can start the game.")
+                        continue
+
+                    poker.start_room_game(room_id)
+                    await _broadcast(room_id)
+                except Exception as e:
+                    await _send_error(websocket, str(e))
+                continue
+
+            await _send_error(websocket, "Unknown message type.", {"received": msg})
 
     except WebSocketDisconnect:
         player_id = room.pop(websocket, "")
