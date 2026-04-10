@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'blackjack_lobby_screen.dart';
+import 'poker_lobby_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -79,10 +80,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _joinGameInvite(String notificationId, String roomId) async {
+  Future<void> _joinGameInvite(String notificationId, String roomId, String game) async {
     try {
+      final normalizedRoomId = roomId.trim().toUpperCase();
+
       final res = await http.get(
-        Uri.parse('$_baseHttp/rooms/${roomId.trim().toUpperCase()}/exists'),
+        Uri.parse('$_baseHttp/rooms/$normalizedRoomId/exists'),
       );
 
       if (!mounted) return;
@@ -120,9 +123,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .update({'status': 'accepted'});
 
       if (!mounted) return;
+
+      Widget target;
+      if (game == 'poker') {
+        target = PokerLobbyScreen(roomId: normalizedRoomId);
+      } else {
+        target = BlackjackLobbyScreen(roomId: normalizedRoomId);
+      }
+
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BlackjackLobbyScreen(roomId: roomId),
+          builder: (_) => target,
         ),
       );
     } catch (_) {
@@ -264,7 +275,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           children: [
                             Expanded(
                               child: FilledButton(
-                                onPressed: () => _joinGameInvite(doc.id, roomId),
+                                onPressed: () => _joinGameInvite(doc.id, roomId, game),
                                 child: const Text('Join'),
                               ),
                             ),

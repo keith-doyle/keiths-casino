@@ -30,6 +30,7 @@ class RoomPokerState:
     game_started: bool = False
     phase: str = "waiting"
     deck: List[str] = field(default_factory=list)
+    community_cards: List[str] = field(default_factory=list)
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -82,6 +83,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
         state.game_started = False
         state.phase = "waiting"
         state.deck = []
+        state.community_cards = []
         for player in state.players.values():
             player.cards = []
             player.folded = False
@@ -99,6 +101,7 @@ def start_room_game(room_id: str) -> RoomPokerState:
     state.deck = _new_deck()
     state.game_started = True
     state.phase = "preflop"
+    state.community_cards = []
     state.status = "Round started. Hole cards dealt."
 
     for pid in state.player_order:
@@ -116,6 +119,59 @@ def start_room_game(room_id: str) -> RoomPokerState:
             player.cards.append(state.deck.pop())
 
     return state
+
+
+def _deal_community_cards(state: RoomPokerState, count: int) -> None:
+    for _ in range(count):
+        if not state.deck:
+            state.deck = _new_deck()
+        state.community_cards.append(state.deck.pop())
+
+
+def advance_phase(room_id: str) -> RoomPokerState:
+    state = get_room_poker_game(room_id)
+
+    if not state.game_started:
+        raise ValueError("Round has not started.")
+
+    if state.phase == "waiting":
+        raise ValueError("Round has not started.")
+
+    if state.phase == "preflop":
+        _deal_community_cards(state, 3)
+        state.phase = "flop"
+        state.status = "Flop dealt."
+        return state
+
+    if state.phase == "flop":
+        _deal_community_cards(state, 1)
+        state.phase = "turn"
+        state.status = "Turn dealt."
+        return state
+
+    if state.phase == "turn":
+        _deal_community_cards(state, 1)
+        state.phase = "river"
+        state.status = "River dealt."
+        return state
+
+    if state.phase == "river":
+        state.phase = "showdown"
+        state.status = "Showdown."
+        return state
+
+    if state.phase == "showdown":
+        state.game_started = False
+        state.phase = "waiting"
+        state.deck = []
+        state.community_cards = []
+        for player in state.players.values():
+            player.cards = []
+            player.folded = False
+        state.status = "Round complete."
+        return state
+
+    raise ValueError("Unknown phase state.")
 
 
 def room_state_to_payload(room_id: str, you_id: str) -> dict:
@@ -139,4 +195,5 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         "status": state.status,
         "game_started": state.game_started,
         "phase": state.phase,
+        "community_cards": state.community_cards,
     }

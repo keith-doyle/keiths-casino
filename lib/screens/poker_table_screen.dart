@@ -27,6 +27,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   StreamSubscription? _sub;
 
   List<Map<String, dynamic>> _players = [];
+  List<String> _communityCards = [];
   String _status = 'Connecting...';
   String? _hostPlayerId;
   bool _busy = true;
@@ -87,6 +88,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           if (!mounted) return;
           setState(() {
             _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
+            _communityCards = List<String>.from(msg["community_cards"] ?? []);
             _hostPlayerId = msg["host_player_id"]?.toString();
             _status = (msg["status"] ?? "Connected").toString();
             _gameStarted = (msg["game_started"] ?? false) as bool;
@@ -130,6 +132,16 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
+
+  String _phaseLabel() {
+    return _phase.toUpperCase();
+  }
+
+  void _advancePhase() {
+    _ws.sendJson({
+      "type": "advance_phase",
+    });
+  }
 
   Widget _buildInfoPill(String text) {
     return Container(
@@ -241,13 +253,28 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   Widget _buildControls() {
-    if (_gameStarted) {
+    if (!_gameStarted) {
       return SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed: null,
-          icon: const Icon(Icons.check_circle_outline),
-          label: Text('Round Active • ${_phase.toUpperCase()}'),
+          onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(
+            _players.length < 2
+                ? 'Need 2 players to start'
+                : (_isHost ? 'Start Round' : 'Waiting for host'),
+          ),
+        ),
+      );
+    }
+
+    if (_phase == 'showdown') {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _busy || !_isHost ? null : _advancePhase,
+          icon: const Icon(Icons.replay),
+          label: Text(_isHost ? 'Finish Round' : 'Waiting for host'),
         ),
       );
     }
@@ -255,13 +282,9 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
-        icon: const Icon(Icons.play_arrow),
-        label: Text(
-          _players.length < 2
-              ? 'Need 2 players to start'
-              : (_isHost ? 'Start Round' : 'Waiting for host'),
-        ),
+        onPressed: _busy || !_isHost ? null : _advancePhase,
+        icon: const Icon(Icons.skip_next),
+        label: Text(_isHost ? 'Advance to Next Phase' : 'Waiting for host'),
       ),
     );
   }
@@ -306,7 +329,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     _buildInfoPill('Room ${widget.roomId}'),
                     _buildInfoPill('Players: ${_players.length}'),
                     _buildInfoPill(_isHost ? 'Host: You' : 'Host assigned'),
-                    _buildInfoPill('Phase: ${_phase.toUpperCase()}'),
+                    _buildInfoPill('Phase: ${_phaseLabel()}'),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -328,6 +351,38 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Community Cards',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _buildFanHand(
+                          _communityCards,
+                          cardWidth: 58,
+                          cardHeight: 88,
+                          overlap: 24,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),

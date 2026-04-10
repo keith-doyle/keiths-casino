@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import 'poker_table_screen.dart';
+import 'poker_lobby_screen.dart';
 
 class PokerRoomScreen extends StatefulWidget {
   const PokerRoomScreen({super.key});
@@ -74,16 +74,9 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
         return;
       }
 
-      final playerName = await _resolvePlayerName();
-
-      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => PokerTableScreen(
-            roomId: roomCode,
-            playerId: currentUid,
-            playerName: playerName,
-          ),
+          builder: (_) => PokerLobbyScreen(roomId: roomCode),
         ),
       );
     } catch (_) {
@@ -97,15 +90,6 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
   }
 
   Future<void> _joinRoom() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final currentUid = currentUser?.uid;
-    if (currentUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be signed in to join a room.')),
-      );
-      return;
-    }
-
     final roomCode = _roomCodeController.text.trim().toUpperCase();
 
     if (roomCode.isEmpty) {
@@ -141,16 +125,9 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
         return;
       }
 
-      final playerName = await _resolvePlayerName();
-
-      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => PokerTableScreen(
-            roomId: roomCode,
-            playerId: currentUid,
-            playerName: playerName,
-          ),
+          builder: (_) => PokerLobbyScreen(roomId: roomCode),
         ),
       );
     } catch (_) {
@@ -161,29 +138,6 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<String> _resolvePlayerName() async {
-    final user = FirebaseAuth.instance.currentUser;
-    final uid = user?.uid;
-    if (uid == null) return 'Player';
-
-    try {
-      final doc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = doc.data();
-      final username = (data?['username'] ?? '').toString().trim();
-      if (username.isNotEmpty) {
-        return username;
-      }
-    } catch (_) {}
-
-    final fallback = (user?.displayName ?? '').trim();
-    if (fallback.isNotEmpty) {
-      return fallback;
-    }
-
-    return uid.length >= 6 ? uid.substring(0, 6) : uid;
   }
 
   @override
