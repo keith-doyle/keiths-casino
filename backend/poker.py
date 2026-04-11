@@ -18,6 +18,7 @@ class PokerPlayerState:
     name: str
     cards: List[str] = field(default_factory=list)
     folded: bool = False
+    has_acted_this_round: bool = False
 
 
 @dataclass
@@ -31,6 +32,8 @@ class RoomPokerState:
     phase: str = "waiting"
     deck: List[str] = field(default_factory=list)
     community_cards: List[str] = field(default_factory=list)
+    turn_index: int = 0
+    current_turn_player_id: Optional[str] = None
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -84,10 +87,21 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
         state.phase = "waiting"
         state.deck = []
         state.community_cards = []
+        state.turn_index = 0
+        state.current_turn_player_id = None
         for player in state.players.values():
             player.cards = []
             player.folded = False
+            player.has_acted_this_round = False
         state.status = "Waiting for players"
+        return state
+
+    if state.current_turn_player_id == player_id:
+        _advance_turn(state)
+        if state.current_turn_player_id:
+            current = state.players.get(state.current_turn_player_id)
+            if current:
+                state.status = f"{current.name}'s turn"
 
     return state
 
@@ -102,12 +116,15 @@ def start_room_game(room_id: str) -> RoomPokerState:
     state.game_started = True
     state.phase = "preflop"
     state.community_cards = []
+    state.turn_index = 0
+    state.current_turn_player_id = None
     state.status = "Round started. Hole cards dealt."
 
     for pid in state.player_order:
         player = state.players[pid]
         player.cards = []
         player.folded = False
+        player.has_acted_this_round = False
 
     for _ in range(2):
         for pid in state.player_order:
@@ -117,6 +134,15 @@ def start_room_game(room_id: str) -> RoomPokerState:
             if not state.deck:
                 state.deck = _new_deck()
             player.cards.append(state.deck.pop())
+
+    first_turn = _first_active_player_id(state)
+    state.current_turn_player_id = first_turn
+    state.turn_index = state.player_order.index(first_turn) if first_turn in state.player_order else 0
+
+    if first_turn:
+        current = state.players.get(first_turn)
+        if current:
+            state.status = f"{current.name}'s turn"
 
     return state
 
@@ -128,6 +154,89 @@ def _deal_community_cards(state: RoomPokerState, count: int) -> None:
         state.community_cards.append(state.deck.pop())
 
 
+def _first_active_player_id(state: RoomPokerState) -> Optional[str]:
+    for pid in state.player_order:
+        player = state.players.get(pid)
+        if player and not player.folded:
+            return pid
+    return None
+
+def _active_player_ids(state: RoomPokerState) -> List[str]:
+    ids: List[str] = []
+    for pid in state.player_order:
+        player = state.players.get(pid)
+        if player and not player.folded:
+            ids.append(pid)
+    return ids
+
+def _advance_turn(state: RoomPokerState) -> None:
+    active_ids = _active_player_ids(state)
+    if not active_ids:
+        state.current_turn_player_id = None
+        return
+
+    if state.current_turn_player_id not in active_ids:
+        state.current_turn_player_id = active_ids[0]
+        state.turn_index = state.player_order.index(active_ids[0])
+        return
+
+    current_pos = active_ids.index(state.current_turn_player_id)
+    next_pos = (current_pos + 1) % len(active_ids)
+    next_pid = active_ids[next_pos]
+    state.current_turn_player_id = next_pid
+    state.turn_index = state.player_order.index(next_pid)
+
+
+def _all_active_players_have_acted(state: RoomPokerState) -> bool:
+    active_ids = _active_player_ids(state)
+    if len(active_ids) < 2:
+        return True
+
+    for pid in active_ids:
+        player = state.players.get(pid)
+        if not player or not player.has_acted_this_round:
+            return False
+    return True
+
+
+def _reset_action_flags(state: RoomPokerState) -> None:
+    for player in state.players.values():
+        if not player.folded:
+            player.has_acted_this_round = False
+
+
+def _move_to_next_phase(state: RoomPokerState) -> None:
+    if state.phase == "preflop":
+        _deal_community_cards(state, 3)
+        state.phase = "flop"
+        _reset_action_flags(state)
+        state.current_turn_player_id = _first_active_player_id(state)
+        state.status = "Flop dealt."
+        return
+
+    if state.phase == "flop":
+        _deal_community_cards(state, 1)
+        state.phase = "turn"
+        _reset_action_flags(state)
+        state.current_turn_player_id = _first_active_player_id(state)
+        state.status = "Turn dealt."
+        return
+
+    if state.phase == "turn":
+        _deal_community_cards(state, 1)
+        state.phase = "river"
+        _reset_action_flags(state)
+        state.current_turn_player_id = _first_active_player_id(state)
+        state.status = "River dealt."
+        return
+
+    if state.phase == "river":
+        state.phase = "showdown"
+        state.current_turn_player_id = None
+        state.status = "Showdown."
+        return
+
+
 def advance_phase(room_id: str) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
@@ -137,41 +246,73 @@ def advance_phase(room_id: str) -> RoomPokerState:
     if state.phase == "waiting":
         raise ValueError("Round has not started.")
 
-    if state.phase == "preflop":
-        _deal_community_cards(state, 3)
-        state.phase = "flop"
-        state.status = "Flop dealt."
-        return state
-
-    if state.phase == "flop":
-        _deal_community_cards(state, 1)
-        state.phase = "turn"
-        state.status = "Turn dealt."
-        return state
-
-    if state.phase == "turn":
-        _deal_community_cards(state, 1)
-        state.phase = "river"
-        state.status = "River dealt."
-        return state
-
-    if state.phase == "river":
-        state.phase = "showdown"
-        state.status = "Showdown."
-        return state
-
     if state.phase == "showdown":
         state.game_started = False
         state.phase = "waiting"
         state.deck = []
         state.community_cards = []
+        state.turn_index = 0
+        state.current_turn_player_id = None
         for player in state.players.values():
             player.cards = []
             player.folded = False
+            player.has_acted_this_round = False
         state.status = "Round complete."
         return state
 
-    raise ValueError("Unknown phase state.")
+    _move_to_next_phase(state)
+    return state
+
+
+def handle_player_action(room_id: str, player_id: str, action: str) -> RoomPokerState:
+    state = get_room_poker_game(room_id)
+
+    if not state.game_started:
+        raise ValueError("Round has not started.")
+
+    if state.phase in ["waiting", "showdown"]:
+        raise ValueError("No player actions are allowed right now.")
+
+    if player_id != state.current_turn_player_id:
+        raise ValueError("It is not your turn.")
+
+    player = state.players.get(player_id)
+    if not player:
+        raise ValueError("Player not found.")
+
+    if player.folded:
+        raise ValueError("Folded players cannot act.")
+
+    if action == "fold":
+        player.folded = True
+        player.has_acted_this_round = True
+        state.status = f"{player.name} folded."
+    elif action == "check":
+        player.has_acted_this_round = True
+        state.status = f"{player.name} checked."
+    else:
+        raise ValueError("Unknown action.")
+
+    active_ids = _active_player_ids(state)
+
+    if len(active_ids) <= 1:
+        state.phase = "showdown"
+        state.current_turn_player_id = None
+        state.status = "Only one player remains. Showdown."
+        return state
+
+    if _all_active_players_have_acted(state):
+        _move_to_next_phase(state)
+        return state
+
+    _advance_turn(state)
+
+    if state.current_turn_player_id:
+        current = state.players.get(state.current_turn_player_id)
+        if current:
+            state.status = f"{current.name}'s turn"
+
+    return state
 
 
 def room_state_to_payload(room_id: str, you_id: str) -> dict:
@@ -187,11 +328,13 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
                 "cards": p.cards if p.id == you_id else [],
                 "card_count": len(p.cards),
                 "folded": p.folded,
+                "has_acted_this_round": p.has_acted_this_round,
                 "is_you": p.id == you_id,
             }
             for p in state.players.values()
         ],
         "host_player_id": state.host_player_id,
+        "turn_player_id": state.current_turn_player_id,
         "status": state.status,
         "game_started": state.game_started,
         "phase": state.phase,

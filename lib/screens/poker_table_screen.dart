@@ -30,6 +30,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   List<String> _communityCards = [];
   String _status = 'Connecting...';
   String? _hostPlayerId;
+  String? _turnPlayerId;
   bool _busy = true;
   bool _gameStarted = false;
   String _phase = 'waiting';
@@ -90,6 +91,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
             _communityCards = List<String>.from(msg["community_cards"] ?? []);
             _hostPlayerId = msg["host_player_id"]?.toString();
+            _turnPlayerId = msg["turn_player_id"]?.toString();
             _status = (msg["status"] ?? "Connected").toString();
             _gameStarted = (msg["game_started"] ?? false) as bool;
             _phase = (msg["phase"] ?? "waiting").toString();
@@ -122,6 +124,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   bool get _isHost => _hostPlayerId == widget.playerId;
+  bool get _isMyTurn => _turnPlayerId == widget.playerId;
 
   Map<String, dynamic>? get _myPlayer {
     try {
@@ -141,6 +144,26 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     _ws.sendJson({
       "type": "advance_phase",
     });
+  }
+
+  void _sendAction(String action) {
+    _ws.sendJson({
+      "type": "action",
+      "action": action,
+    });
+  }
+
+  String _turnLabel() {
+    if (_turnPlayerId == null) return 'No active turn';
+    try {
+      final player = _players.firstWhere(
+            (p) => (p["id"] ?? "").toString() == _turnPlayerId,
+      );
+      final name = (player["name"] ?? 'Player').toString();
+      return _isMyTurn ? 'Your turn' : '$name\'s turn';
+    } catch (_) {
+      return 'Turn active';
+    }
   }
 
   Widget _buildInfoPill(String text) {
@@ -205,8 +228,15 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final name = (player["name"] ?? "Player").toString();
     final isYou = playerId == widget.playerId;
     final isHost = playerId == _hostPlayerId;
+    final isTurn = playerId == _turnPlayerId;
     final folded = (player["folded"] ?? false) as bool;
+    final acted = (player["has_acted_this_round"] ?? false) as bool;
     final cardCount = ((player["card_count"] ?? 0) as num).toInt();
+
+    String subtitle = folded ? 'Folded' : 'Cards: $cardCount';
+    if (!folded && acted && _gameStarted) {
+      subtitle = 'Acted • Cards: $cardCount';
+    }
 
     return Card(
       color: Colors.white.withOpacity(0.95),
@@ -216,9 +246,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       child: ListTile(
         leading: const Icon(Icons.person),
         title: Text(name),
-        subtitle: Text(
-          folded ? 'Folded • Cards: $cardCount' : 'Cards: $cardCount',
-        ),
+        subtitle: Text(subtitle),
         trailing: Wrap(
           spacing: 8,
           children: [
@@ -234,6 +262,22 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: Colors.deepPurple,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            if (isTurn)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'TURN',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green,
                     fontSize: 11,
                   ),
                 ),
@@ -279,12 +323,34 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       );
     }
 
+    if (_isMyTurn) {
+      return Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _busy ? null : () => _sendAction('check'),
+              icon: const Icon(Icons.check),
+              label: const Text('Check'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _busy ? null : () => _sendAction('fold'),
+              icon: const Icon(Icons.close),
+              label: const Text('Fold'),
+            ),
+          ),
+        ],
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: _busy || !_isHost ? null : _advancePhase,
-        icon: const Icon(Icons.skip_next),
-        label: Text(_isHost ? 'Advance to Next Phase' : 'Waiting for host'),
+        onPressed: null,
+        icon: const Icon(Icons.hourglass_bottom),
+        label: Text(_turnLabel()),
       ),
     );
   }
@@ -350,6 +416,27 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Text(
+                    _turnLabel(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _isMyTurn ? Colors.green.shade300 : Colors.white,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),

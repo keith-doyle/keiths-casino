@@ -101,6 +101,16 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
                     await _send_error(websocket, str(e))
                 continue
 
+            if mtype == "action":
+                action = (msg.get("action") or "").strip()
+
+                try:
+                    poker.handle_player_action(room_id, player_id, action)
+                    await _broadcast(room_id)
+                except Exception as e:
+                    await _send_error(websocket, str(e))
+                continue
+
             if mtype == "advance_phase":
                 try:
                     state = poker.get_room_poker_game(room_id)
