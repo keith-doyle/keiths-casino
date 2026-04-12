@@ -111,19 +111,6 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
                     await _send_error(websocket, str(e))
                 continue
 
-            if mtype == "advance_phase":
-                try:
-                    state = poker.get_room_poker_game(room_id)
-                    if state.host_player_id != player_id:
-                        await _send_error(websocket, "Only the host can advance the round.")
-                        continue
-
-                    poker.advance_phase(room_id)
-                    await _broadcast(room_id)
-                except Exception as e:
-                    await _send_error(websocket, str(e))
-                continue
-
             await _send_error(websocket, "Unknown message type.", {"received": msg})
 
     except WebSocketDisconnect:

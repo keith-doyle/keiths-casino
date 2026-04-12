@@ -140,12 +140,6 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     return _phase.toUpperCase();
   }
 
-  void _advancePhase() {
-    _ws.sendJson({
-      "type": "advance_phase",
-    });
-  }
-
   void _sendAction(String action) {
     _ws.sendJson({
       "type": "action",
@@ -154,6 +148,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   String _turnLabel() {
+    if (!_gameStarted) return 'Waiting to start';
     if (_turnPlayerId == null) return 'No active turn';
     try {
       final player = _players.firstWhere(
@@ -308,17 +303,6 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                 ? 'Need 2 players to start'
                 : (_isHost ? 'Start Round' : 'Waiting for host'),
           ),
-        ),
-      );
-    }
-
-    if (_phase == 'showdown') {
-      return SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: _busy || !_isHost ? null : _advancePhase,
-          icon: const Icon(Icons.replay),
-          label: Text(_isHost ? 'Finish Round' : 'Waiting for host'),
         ),
       );
     }

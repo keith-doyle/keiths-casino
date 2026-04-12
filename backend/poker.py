@@ -83,16 +83,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
         return RoomPokerState(room_id=room_id)
 
     if len(state.player_order) < 2:
-        state.game_started = False
-        state.phase = "waiting"
-        state.deck = []
-        state.community_cards = []
-        state.turn_index = 0
-        state.current_turn_player_id = None
-        for player in state.players.values():
-            player.cards = []
-            player.folded = False
-            player.has_acted_this_round = False
+        _reset_round_state(state)
         state.status = "Waiting for players"
         return state
 
@@ -102,6 +93,11 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
             current = state.players.get(state.current_turn_player_id)
             if current:
                 state.status = f"{current.name}'s turn"
+
+    active_ids = _active_player_ids(state)
+    if state.game_started and len(active_ids) <= 1:
+        _finish_round(state)
+        return state
 
     return state
 
@@ -161,6 +157,7 @@ def _first_active_player_id(state: RoomPokerState) -> Optional[str]:
             return pid
     return None
 
+
 def _active_player_ids(state: RoomPokerState) -> List[str]:
     ids: List[str] = []
     for pid in state.player_order:
@@ -168,6 +165,7 @@ def _active_player_ids(state: RoomPokerState) -> List[str]:
         if player and not player.folded:
             ids.append(pid)
     return ids
+
 
 def _advance_turn(state: RoomPokerState) -> None:
     active_ids = _active_player_ids(state)
@@ -234,34 +232,27 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         state.phase = "showdown"
         state.current_turn_player_id = None
         state.status = "Showdown."
+        _finish_round(state)
         return
 
 
-def advance_phase(room_id: str) -> RoomPokerState:
-    state = get_room_poker_game(room_id)
+def _reset_round_state(state: RoomPokerState) -> None:
+    state.game_started = False
+    state.phase = "waiting"
+    state.deck = []
+    state.community_cards = []
+    state.turn_index = 0
+    state.current_turn_player_id = None
 
-    if not state.game_started:
-        raise ValueError("Round has not started.")
+    for player in state.players.values():
+        player.cards = []
+        player.folded = False
+        player.has_acted_this_round = False
 
-    if state.phase == "waiting":
-        raise ValueError("Round has not started.")
 
-    if state.phase == "showdown":
-        state.game_started = False
-        state.phase = "waiting"
-        state.deck = []
-        state.community_cards = []
-        state.turn_index = 0
-        state.current_turn_player_id = None
-        for player in state.players.values():
-            player.cards = []
-            player.folded = False
-            player.has_acted_this_round = False
-        state.status = "Round complete."
-        return state
-
-    _move_to_next_phase(state)
-    return state
+def _finish_round(state: RoomPokerState) -> None:
+    _reset_round_state(state)
+    state.status = "Round complete."
 
 
 def handle_player_action(room_id: str, player_id: str, action: str) -> RoomPokerState:
@@ -296,13 +287,16 @@ def handle_player_action(room_id: str, player_id: str, action: str) -> RoomPoker
     active_ids = _active_player_ids(state)
 
     if len(active_ids) <= 1:
-        state.phase = "showdown"
-        state.current_turn_player_id = None
-        state.status = "Only one player remains. Showdown."
+        _finish_round(state)
+        state.status = "Only one player remains. Round complete."
         return state
 
     if _all_active_players_have_acted(state):
         _move_to_next_phase(state)
+        if state.game_started and state.current_turn_player_id:
+            current = state.players.get(state.current_turn_player_id)
+            if current:
+                state.status = f"{state.status} {current.name}'s turn"
         return state
 
     _advance_turn(state)
