@@ -19,6 +19,8 @@ class PokerPlayerState:
     cards: List[str] = field(default_factory=list)
     folded: bool = False
     has_acted_this_round: bool = False
+    chips: int = 1000
+    current_bet: int = 0
 
 
 @dataclass
@@ -34,6 +36,8 @@ class RoomPokerState:
     community_cards: List[str] = field(default_factory=list)
     turn_index: int = 0
     current_turn_player_id: Optional[str] = None
+    pot: int = 0
+    current_bet: int = 0
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -61,7 +65,6 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPoker
         state.host_player_id = player_id
 
     state.status = f"{player_name} joined the table."
-
     return state
 
 
@@ -87,17 +90,18 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
         state.status = "Waiting for players"
         return state
 
+    active_ids = _active_player_ids(state)
+
+    if state.game_started and len(active_ids) <= 1:
+        _finish_round(state)
+        return state
+
     if state.current_turn_player_id == player_id:
         _advance_turn(state)
         if state.current_turn_player_id:
             current = state.players.get(state.current_turn_player_id)
             if current:
                 state.status = f"{current.name}'s turn"
-
-    active_ids = _active_player_ids(state)
-    if state.game_started and len(active_ids) <= 1:
-        _finish_round(state)
-        return state
 
     return state
 
@@ -114,13 +118,15 @@ def start_room_game(room_id: str) -> RoomPokerState:
     state.community_cards = []
     state.turn_index = 0
     state.current_turn_player_id = None
-    state.status = "Round started. Hole cards dealt."
+    state.pot = 0
+    state.current_bet = 0
 
     for pid in state.player_order:
         player = state.players[pid]
         player.cards = []
         player.folded = False
         player.has_acted_this_round = False
+        player.current_bet = 0
 
     for _ in range(2):
         for pid in state.player_order:
@@ -198,9 +204,11 @@ def _all_active_players_have_acted(state: RoomPokerState) -> bool:
 
 
 def _reset_action_flags(state: RoomPokerState) -> None:
+    state.current_bet = 0
     for player in state.players.values():
         if not player.folded:
             player.has_acted_this_round = False
+        player.current_bet = 0
 
 
 def _move_to_next_phase(state: RoomPokerState) -> None:
@@ -229,9 +237,6 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         return
 
     if state.phase == "river":
-        state.phase = "showdown"
-        state.current_turn_player_id = None
-        state.status = "Showdown."
         _finish_round(state)
         return
 
@@ -243,25 +248,38 @@ def _reset_round_state(state: RoomPokerState) -> None:
     state.community_cards = []
     state.turn_index = 0
     state.current_turn_player_id = None
+    state.pot = 0
+    state.current_bet = 0
 
     for player in state.players.values():
         player.cards = []
         player.folded = False
         player.has_acted_this_round = False
+        player.current_bet = 0
 
 
 def _finish_round(state: RoomPokerState) -> None:
+    active = _active_player_ids(state)
+    final_status = "Round complete."
+
+    if active:
+        winner_id = random.choice(active)
+        winner = state.players[winner_id]
+        winnings = state.pot
+        winner.chips += winnings
+        final_status = f"{winner.name} wins {winnings} chips!"
+
     _reset_round_state(state)
-    state.status = "Round complete."
+    state.status = final_status
 
 
-def handle_player_action(room_id: str, player_id: str, action: str) -> RoomPokerState:
+def handle_player_action(room_id: str, player_id: str, action: str, amount: int = 0) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
     if not state.game_started:
         raise ValueError("Round has not started.")
 
-    if state.phase in ["waiting", "showdown"]:
+    if state.phase == "waiting":
         raise ValueError("No player actions are allowed right now.")
 
     if player_id != state.current_turn_player_id:
@@ -277,18 +295,54 @@ def handle_player_action(room_id: str, player_id: str, action: str) -> RoomPoker
     if action == "fold":
         player.folded = True
         player.has_acted_this_round = True
-        state.status = f"{player.name} folded."
+        state.status = f"{player.name} folded"
+
     elif action == "check":
+        if state.current_bet > player.current_bet:
+            raise ValueError("Cannot check, must call or fold.")
         player.has_acted_this_round = True
-        state.status = f"{player.name} checked."
+        state.status = f"{player.name} checked"
+
+    elif action == "call":
+        diff = state.current_bet - player.current_bet
+        if diff < 0:
+            diff = 0
+        if diff > player.chips:
+            raise ValueError("Not enough chips to call.")
+
+        player.chips -= diff
+        player.current_bet += diff
+        state.pot += diff
+        player.has_acted_this_round = True
+        state.status = f"{player.name} called"
+
+    elif action == "raise":
+        if amount <= state.current_bet:
+            raise ValueError("Raise must be higher than the current bet.")
+
+        diff = amount - player.current_bet
+        if diff > player.chips:
+            raise ValueError("Not enough chips to raise.")
+
+        player.chips -= diff
+        player.current_bet = amount
+        state.current_bet = amount
+        state.pot += diff
+
+        for p in state.players.values():
+            if not p.folded:
+                p.has_acted_this_round = False
+
+        player.has_acted_this_round = True
+        state.status = f"{player.name} raised to {amount}"
+
     else:
-        raise ValueError("Unknown action.")
+        raise ValueError("Invalid action.")
 
     active_ids = _active_player_ids(state)
 
     if len(active_ids) <= 1:
         _finish_round(state)
-        state.status = "Only one player remains. Round complete."
         return state
 
     if _all_active_players_have_acted(state):
@@ -323,6 +377,8 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
                 "card_count": len(p.cards),
                 "folded": p.folded,
                 "has_acted_this_round": p.has_acted_this_round,
+                "chips": p.chips,
+                "current_bet": p.current_bet,
                 "is_you": p.id == you_id,
             }
             for p in state.players.values()
@@ -333,4 +389,6 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         "game_started": state.game_started,
         "phase": state.phase,
         "community_cards": state.community_cards,
+        "pot": state.pot,
+        "current_bet": state.current_bet,
     }

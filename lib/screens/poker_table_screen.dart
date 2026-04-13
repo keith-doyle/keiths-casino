@@ -34,6 +34,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   bool _busy = true;
   bool _gameStarted = false;
   String _phase = 'waiting';
+  int _pot = 0;
+  int _currentBet = 0;
 
   @override
   void initState() {
@@ -95,6 +97,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             _status = (msg["status"] ?? "Connected").toString();
             _gameStarted = (msg["game_started"] ?? false) as bool;
             _phase = (msg["phase"] ?? "waiting").toString();
+            _pot = ((msg["pot"] ?? 0) as num).toInt();
+            _currentBet = ((msg["current_bet"] ?? 0) as num).toInt();
             _busy = false;
           });
           return;
@@ -135,15 +139,18 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
+  int get _myChips => (((_myPlayer?["chips"] ?? 0) as num).toInt());
+  int get _myCurrentBet => (((_myPlayer?["current_bet"] ?? 0) as num).toInt());
 
   String _phaseLabel() {
     return _phase.toUpperCase();
   }
 
-  void _sendAction(String action) {
+  void _sendAction(String action, {int amount = 0}) {
     _ws.sendJson({
       "type": "action",
       "action": action,
+      "amount": amount,
     });
   }
 
@@ -227,10 +234,15 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final folded = (player["folded"] ?? false) as bool;
     final acted = (player["has_acted_this_round"] ?? false) as bool;
     final cardCount = ((player["card_count"] ?? 0) as num).toInt();
+    final chips = ((player["chips"] ?? 0) as num).toInt();
+    final currentBet = ((player["current_bet"] ?? 0) as num).toInt();
 
-    String subtitle = folded ? 'Folded' : 'Cards: $cardCount';
+    String subtitle = folded
+        ? 'Folded • Chips: $chips'
+        : 'Cards: $cardCount • Chips: $chips • Bet: $currentBet';
+
     if (!folded && acted && _gameStarted) {
-      subtitle = 'Acted • Cards: $cardCount';
+      subtitle = 'Acted • Cards: $cardCount • Chips: $chips • Bet: $currentBet';
     }
 
     return Card(
@@ -308,22 +320,53 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     }
 
     if (_isMyTurn) {
-      return Row(
+      final canCheck = _currentBet == _myCurrentBet;
+      final raiseAmount = _currentBet + 50;
+      final canRaise = _myChips >= (raiseAmount - _myCurrentBet);
+      final canCall = _myChips >= (_currentBet - _myCurrentBet);
+
+      return Column(
         children: [
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: _busy ? null : () => _sendAction('check'),
-              icon: const Icon(Icons.check),
-              label: const Text('Check'),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy || !canCheck ? null : () => _sendAction('check'),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Check'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy || !canCall ? null : () => _sendAction('call'),
+                  icon: const Icon(Icons.call_made),
+                  label: const Text('Call'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: _busy ? null : () => _sendAction('fold'),
-              icon: const Icon(Icons.close),
-              label: const Text('Fold'),
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () => _sendAction('fold'),
+                  icon: const Icon(Icons.close),
+                  label: const Text('Fold'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy || !canRaise
+                      ? null
+                      : () => _sendAction('raise', amount: raiseAmount),
+                  icon: const Icon(Icons.arrow_upward),
+                  label: Text('Raise to $raiseAmount'),
+                ),
+              ),
+            ],
           ),
         ],
       );
@@ -453,6 +496,22 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                           overlap: 24,
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Pot: $_pot',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Current bet: $_currentBet',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -483,6 +542,14 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                           cardWidth: 64,
                           cardHeight: 96,
                           overlap: 30,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Your chips: $_myChips • Your bet: $_myCurrentBet',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],

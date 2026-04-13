@@ -103,9 +103,10 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
 
             if mtype == "action":
                 action = (msg.get("action") or "").strip()
+                amount = int(msg.get("amount", 0) or 0)
 
                 try:
-                    poker.handle_player_action(room_id, player_id, action)
+                    poker.handle_player_action(room_id, player_id, action, amount)
                     await _broadcast(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
