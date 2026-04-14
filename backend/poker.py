@@ -451,15 +451,20 @@ def _advance_turn(state: RoomPokerState) -> None:
     state.turn_index = state.player_order.index(next_pid)
 
 
-def _all_active_players_have_acted(state: RoomPokerState) -> bool:
+def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
     active_ids = _active_player_ids(state)
+
     if len(active_ids) < 2:
         return True
 
     for pid in active_ids:
         player = state.players.get(pid)
-        if not player or not player.has_acted_this_round:
+        if not player:
             return False
+
+        if player.current_bet != state.current_bet and player.chips > 0:
+            return False
+
     return True
 
 
@@ -589,17 +594,19 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
         state.status = f"{player.name} folded"
 
     elif action == "check":
-        if state.current_bet > player.current_bet:
+        if state.current_bet != player.current_bet:
             raise ValueError("Cannot check, must call or fold.")
         player.has_acted_this_round = True
         state.status = f"{player.name} checked"
 
     elif action == "call":
         diff = state.current_bet - player.current_bet
-        if diff < 0:
-            diff = 0
-        if diff > player.chips:
-            raise ValueError("Not enough chips to call.")
+
+        if diff <= 0:
+            raise ValueError("Nothing to call.")
+
+        if diff >= player.chips:
+            diff = player.chips
 
         player.chips -= diff
         player.current_bet += diff
@@ -609,9 +616,10 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
 
     elif action == "raise":
         if amount <= state.current_bet:
-            raise ValueError("Raise must be higher than the current bet.")
+            raise ValueError("Raise must be higher than current bet.")
 
         diff = amount - player.current_bet
+
         if diff > player.chips:
             raise ValueError("Not enough chips to raise.")
 
@@ -621,7 +629,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
         state.pot += diff
 
         for p in state.players.values():
-            if not p.folded:
+            if not p.folded and p.id != player.id:
                 p.has_acted_this_round = False
 
         player.has_acted_this_round = True
@@ -636,7 +644,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
         _finish_round(state)
         return state
 
-    if _all_active_players_have_acted(state):
+    if _all_active_players_have_matched_bet(state):
         _move_to_next_phase(state)
         if state.game_started and state.current_turn_player_id:
             current = state.players.get(state.current_turn_player_id)
