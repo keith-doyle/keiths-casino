@@ -34,6 +34,9 @@ HAND_RANK_NAMES = [
     "Straight Flush",
 ]
 
+SMALL_BLIND_AMOUNT = 10
+BIG_BLIND_AMOUNT = 20
+
 
 def _new_deck() -> List[str]:
     deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
@@ -166,6 +169,12 @@ class RoomPokerState:
     current_bet: int = 0
     winner_player_id: Optional[str] = None
     winning_hand_name: Optional[str] = None
+    dealer_index: int = -1
+    dealer_player_id: Optional[str] = None
+    small_blind_player_id: Optional[str] = None
+    big_blind_player_id: Optional[str] = None
+    small_blind_amount: int = SMALL_BLIND_AMOUNT
+    big_blind_amount: int = BIG_BLIND_AMOUNT
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -175,6 +184,109 @@ def get_room_poker_game(room_id: str) -> RoomPokerState:
     if room_id not in _room_poker_games:
         _room_poker_games[room_id] = RoomPokerState(room_id=room_id)
     return _room_poker_games[room_id]
+
+
+def _active_seated_ids(state: RoomPokerState) -> List[str]:
+    return [pid for pid in state.player_order if pid in state.players]
+
+
+def _next_seated_player_id(state: RoomPokerState, start_index: int) -> Optional[str]:
+    seated_ids = _active_seated_ids(state)
+    if not seated_ids:
+        return None
+
+    n = len(state.player_order)
+    for offset in range(1, n + 1):
+        idx = (start_index + offset) % n
+        pid = state.player_order[idx]
+        if pid in state.players:
+            return pid
+    return None
+
+
+def _rotate_dealer_and_blinds(state: RoomPokerState) -> None:
+    seated_ids = _active_seated_ids(state)
+    if len(seated_ids) < 2:
+        state.dealer_player_id = None
+        state.small_blind_player_id = None
+        state.big_blind_player_id = None
+        return
+
+    if state.dealer_index < 0 or state.dealer_index >= len(state.player_order):
+        first_pid = seated_ids[0]
+        state.dealer_index = state.player_order.index(first_pid)
+    else:
+        next_dealer_pid = _next_seated_player_id(state, state.dealer_index)
+        if next_dealer_pid is None:
+            next_dealer_pid = seated_ids[0]
+        state.dealer_index = state.player_order.index(next_dealer_pid)
+
+    state.dealer_player_id = state.player_order[state.dealer_index]
+
+    small_blind_pid = _next_seated_player_id(state, state.dealer_index)
+    if small_blind_pid is None:
+        small_blind_pid = state.dealer_player_id
+
+    big_blind_pid = _next_seated_player_id(
+        state,
+        state.player_order.index(small_blind_pid),
+    )
+    if big_blind_pid is None:
+        big_blind_pid = small_blind_pid
+
+    state.small_blind_player_id = small_blind_pid
+    state.big_blind_player_id = big_blind_pid
+
+
+def _post_blind(player: PokerPlayerState, amount: int) -> int:
+    posted = min(player.chips, amount)
+    player.chips -= posted
+    player.current_bet += posted
+    return posted
+
+
+def _apply_blinds(state: RoomPokerState) -> None:
+    state.pot = 0
+    state.current_bet = 0
+
+    if state.small_blind_player_id and state.small_blind_player_id in state.players:
+        sb_player = state.players[state.small_blind_player_id]
+        sb_posted = _post_blind(sb_player, state.small_blind_amount)
+        state.pot += sb_posted
+
+    if state.big_blind_player_id and state.big_blind_player_id in state.players:
+        bb_player = state.players[state.big_blind_player_id]
+        bb_posted = _post_blind(bb_player, state.big_blind_amount)
+        state.pot += bb_posted
+        state.current_bet = bb_posted
+
+
+def _set_first_turn_preflop(state: RoomPokerState) -> None:
+    if not state.big_blind_player_id or state.big_blind_player_id not in state.player_order:
+        state.current_turn_player_id = _first_active_player_id(state)
+        if state.current_turn_player_id in state.player_order:
+            state.turn_index = state.player_order.index(state.current_turn_player_id)
+        return
+
+    start_index = state.player_order.index(state.big_blind_player_id)
+    next_pid = _next_active_player_after_index(state, start_index)
+    state.current_turn_player_id = next_pid
+    if next_pid and next_pid in state.player_order:
+        state.turn_index = state.player_order.index(next_pid)
+
+
+def _next_active_player_after_index(state: RoomPokerState, start_index: int) -> Optional[str]:
+    active_ids = _active_player_ids(state)
+    if not active_ids:
+        return None
+
+    n = len(state.player_order)
+    for offset in range(1, n + 1):
+        idx = (start_index + offset) % n
+        pid = state.player_order[idx]
+        if pid in active_ids:
+            return pid
+    return None
 
 
 def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPokerState:
@@ -204,6 +316,14 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
 
     if state.host_player_id == player_id:
         state.host_player_id = state.player_order[0] if state.player_order else None
+
+    if state.dealer_player_id == player_id:
+        state.dealer_player_id = None
+        state.dealer_index = -1
+    if state.small_blind_player_id == player_id:
+        state.small_blind_player_id = None
+    if state.big_blind_player_id == player_id:
+        state.big_blind_player_id = None
 
     if leaving:
         state.status = f"{leaving.name} left the table."
@@ -239,6 +359,8 @@ def start_room_game(room_id: str) -> RoomPokerState:
     if len(state.player_order) < 2:
         raise ValueError("At least 2 players are required to start.")
 
+    _rotate_dealer_and_blinds(state)
+
     state.deck = _new_deck()
     state.game_started = True
     state.round_over = False
@@ -259,6 +381,8 @@ def start_room_game(room_id: str) -> RoomPokerState:
         player.current_bet = 0
         player.hand_name = None
 
+    _apply_blinds(state)
+
     for _ in range(2):
         for pid in state.player_order:
             player = state.players.get(pid)
@@ -268,14 +392,19 @@ def start_room_game(room_id: str) -> RoomPokerState:
                 state.deck = _new_deck()
             player.cards.append(state.deck.pop())
 
-    first_turn = _first_active_player_id(state)
-    state.current_turn_player_id = first_turn
-    state.turn_index = state.player_order.index(first_turn) if first_turn in state.player_order else 0
+    _set_first_turn_preflop(state)
 
-    if first_turn:
-        current = state.players.get(first_turn)
+    if state.current_turn_player_id:
+        current = state.players.get(state.current_turn_player_id)
         if current:
-            state.status = f"{current.name}'s turn"
+            state.status = (
+                f"Dealer: {state.players[state.dealer_player_id].name}. "
+                f"{state.players[state.small_blind_player_id].name} posted small blind "
+                f"{state.small_blind_amount}. "
+                f"{state.players[state.big_blind_player_id].name} posted big blind "
+                f"{state.big_blind_amount}. "
+                f"{current.name}'s turn"
+            )
 
     return state
 
@@ -557,4 +686,9 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         "current_bet": state.current_bet,
         "winner_player_id": state.winner_player_id,
         "winning_hand_name": state.winning_hand_name,
+        "dealer_player_id": state.dealer_player_id,
+        "small_blind_player_id": state.small_blind_player_id,
+        "big_blind_player_id": state.big_blind_player_id,
+        "small_blind_amount": state.small_blind_amount,
+        "big_blind_amount": state.big_blind_amount,
     }
