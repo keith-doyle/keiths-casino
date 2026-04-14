@@ -22,6 +22,18 @@ RANK_ORDER = {
     "A": 14,
 }
 
+HAND_RANK_NAMES = [
+    "High Card",
+    "Pair",
+    "Two Pair",
+    "Three of a Kind",
+    "Straight",
+    "Flush",
+    "Full House",
+    "Four of a Kind",
+    "Straight Flush",
+]
+
 
 def _new_deck() -> List[str]:
     deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
@@ -133,6 +145,7 @@ class PokerPlayerState:
     has_acted_this_round: bool = False
     chips: int = 1000
     current_bet: int = 0
+    hand_name: Optional[str] = None
 
 
 @dataclass
@@ -176,7 +189,7 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPoker
     state.player_order.append(player_id)
 
     if not state.host_player_id:
-      state.host_player_id = player_id
+        state.host_player_id = player_id
 
     state.status = f"{player_name} joined the table."
     return state
@@ -244,6 +257,7 @@ def start_room_game(room_id: str) -> RoomPokerState:
         player.folded = False
         player.has_acted_this_round = False
         player.current_bet = 0
+        player.hand_name = None
 
     for _ in range(2):
         for pid in state.player_order:
@@ -376,6 +390,7 @@ def _reset_round_state(state: RoomPokerState) -> None:
         player.folded = False
         player.has_acted_this_round = False
         player.current_bet = 0
+        player.hand_name = None
 
 
 def _finish_round(state: RoomPokerState) -> None:
@@ -402,29 +417,19 @@ def _finish_round(state: RoomPokerState) -> None:
             results.append((pid, best_hand))
 
         results.sort(key=lambda item: item[1], reverse=True)
-        winner_id, best_hand = results[0]
 
+        winner_id, best_hand = results[0]
         winner = state.players[winner_id]
         winnings = state.pot
         winner.chips += winnings
 
-        hand_rank_names = [
-            "High Card",
-            "Pair",
-            "Two Pair",
-            "Three of a Kind",
-            "Straight",
-            "Flush",
-            "Full House",
-            "Four of a Kind",
-            "Straight Flush",
-        ]
-
-        hand_name = hand_rank_names[best_hand[0]]
-
         state.winner_player_id = winner_id
-        state.winning_hand_name = hand_name
-        final_status = f"{winner.name} wins {winnings} chips with {hand_name}!"
+        state.winning_hand_name = HAND_RANK_NAMES[best_hand[0]]
+
+        for pid, hand in results:
+            state.players[pid].hand_name = HAND_RANK_NAMES[hand[0]]
+
+        final_status = f"{winner.name} wins {winnings} chips with {state.winning_hand_name}!"
 
     state.pot = 0
     state.status = final_status
@@ -525,17 +530,18 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
 
     return {
         "type": "table_state",
-        "room_id": room_id,
+        "room_id": state.room_id,
         "players": [
             {
                 "id": p.id,
                 "name": p.name,
-                "cards": p.cards if p.id == you_id else [],
+                "cards": p.cards if (p.id == you_id or state.round_over) else [],
                 "card_count": len(p.cards),
                 "folded": p.folded,
                 "has_acted_this_round": p.has_acted_this_round,
                 "chips": p.chips,
                 "current_bet": p.current_bet,
+                "hand_name": p.hand_name if state.round_over else None,
                 "is_you": p.id == you_id,
             }
             for p in state.players.values()

@@ -33,9 +33,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   String? _turnPlayerId;
   bool _busy = true;
   bool _gameStarted = false;
+  bool _roundOver = false;
   String _phase = 'waiting';
   int _pot = 0;
   int _currentBet = 0;
+  String? _winnerPlayerId;
+  String? _winningHandName;
 
   @override
   void initState() {
@@ -96,9 +99,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             _turnPlayerId = msg["turn_player_id"]?.toString();
             _status = (msg["status"] ?? "Connected").toString();
             _gameStarted = (msg["game_started"] ?? false) as bool;
+            _roundOver = (msg["round_over"] ?? false) as bool;
             _phase = (msg["phase"] ?? "waiting").toString();
             _pot = ((msg["pot"] ?? 0) as num).toInt();
             _currentBet = ((msg["current_bet"] ?? 0) as num).toInt();
+            _winnerPlayerId = msg["winner_player_id"]?.toString();
+            _winningHandName = msg["winning_hand_name"]?.toString();
             _busy = false;
           });
           return;
@@ -129,6 +135,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
   bool get _isHost => _hostPlayerId == widget.playerId;
   bool get _isMyTurn => _turnPlayerId == widget.playerId;
+  bool get _iWon => _winnerPlayerId == widget.playerId;
 
   Map<String, dynamic>? get _myPlayer {
     try {
@@ -155,6 +162,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   String _turnLabel() {
+    if (_roundOver) return 'Round complete';
     if (!_gameStarted) return 'Waiting to start';
     if (_turnPlayerId == null) return 'No active turn';
     try {
@@ -165,6 +173,27 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       return _isMyTurn ? 'Your turn' : '$name\'s turn';
     } catch (_) {
       return 'Turn active';
+    }
+  }
+
+  String _winnerLabel() {
+    if (!_roundOver || _winnerPlayerId == null) return '';
+    if (_iWon) {
+      return _winningHandName == null
+          ? 'You won the round'
+          : 'You won with $_winningHandName';
+    }
+
+    try {
+      final winner = _players.firstWhere(
+            (p) => (p["id"] ?? "").toString() == _winnerPlayerId,
+      );
+      final winnerName = (winner["name"] ?? 'Player').toString();
+      return _winningHandName == null
+          ? '$winnerName won the round'
+          : '$winnerName won with $_winningHandName';
+    } catch (_) {
+      return 'Round complete';
     }
   }
 
@@ -231,24 +260,34 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final isYou = playerId == widget.playerId;
     final isHost = playerId == _hostPlayerId;
     final isTurn = playerId == _turnPlayerId;
+    final isWinner = playerId == _winnerPlayerId;
     final folded = (player["folded"] ?? false) as bool;
     final acted = (player["has_acted_this_round"] ?? false) as bool;
     final cardCount = ((player["card_count"] ?? 0) as num).toInt();
     final chips = ((player["chips"] ?? 0) as num).toInt();
     final currentBet = ((player["current_bet"] ?? 0) as num).toInt();
+    final handName = (player["hand_name"] ?? "").toString();
 
     String subtitle = folded
         ? 'Folded • Chips: $chips'
         : 'Cards: $cardCount • Chips: $chips • Bet: $currentBet';
 
-    if (!folded && acted && _gameStarted) {
+    if (_roundOver && handName.isNotEmpty) {
+      subtitle = '$handName • Chips: $chips';
+    } else if (!folded && acted && _gameStarted) {
       subtitle = 'Acted • Cards: $cardCount • Chips: $chips • Bet: $currentBet';
     }
 
     return Card(
-      color: Colors.white.withOpacity(0.95),
+      color: isWinner
+          ? Colors.green.withOpacity(0.30)
+          : Colors.white.withOpacity(0.95),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isWinner ? Colors.green : Colors.transparent,
+          width: isWinner ? 1.5 : 0,
+        ),
       ),
       child: ListTile(
         leading: const Icon(Icons.person),
@@ -256,7 +295,24 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         subtitle: Text(subtitle),
         trailing: Wrap(
           spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            if (isWinner)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'WINNER',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
             if (isHost)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -304,6 +360,19 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   }
 
   Widget _buildControls() {
+    if (_roundOver) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
+          icon: const Icon(Icons.replay),
+          label: Text(
+            _isHost ? 'Start New Round' : 'Waiting for host',
+          ),
+        ),
+      );
+    }
+
     if (!_gameStarted) {
       return SizedBox(
         width: double.infinity,
@@ -446,6 +515,29 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     ),
                   ),
                 ),
+                if (_roundOver && _winnerPlayerId != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.green.withOpacity(0.45)),
+                    ),
+                    child: Text(
+                      _winnerLabel(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
