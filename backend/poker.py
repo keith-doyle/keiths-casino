@@ -1,15 +1,127 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import random
+from itertools import combinations
 
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["H", "D", "C", "S"]
+
+RANK_ORDER = {
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "J": 11,
+    "Q": 12,
+    "K": 13,
+    "A": 14,
+}
 
 
 def _new_deck() -> List[str]:
     deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
     random.shuffle(deck)
     return deck
+
+
+def _parse_card(card: str):
+    rank = card[:-1]
+    suit = card[-1]
+    return RANK_ORDER[rank], suit
+
+
+def _get_rank_counts(cards):
+    counts = {}
+    for rank, _ in cards:
+        counts[rank] = counts.get(rank, 0) + 1
+    return counts
+
+
+def _is_flush(cards):
+    suits = [suit for _, suit in cards]
+    return len(set(suits)) == 1
+
+
+def _is_straight(ranks):
+    unique = sorted(set(ranks))
+    if len(unique) != 5:
+        return False, 0
+
+    if unique == [2, 3, 4, 5, 14]:
+        return True, 5
+
+    if unique[-1] - unique[0] == 4:
+        return True, unique[-1]
+
+    return False, 0
+
+
+def _evaluate_5(cards):
+    ranks = sorted([rank for rank, _ in cards], reverse=True)
+    counts = _get_rank_counts(cards)
+    count_values = sorted(counts.values(), reverse=True)
+
+    is_flush = _is_flush(cards)
+    is_straight, high_straight = _is_straight(ranks)
+
+    if is_straight and is_flush:
+        return 8, [high_straight]
+
+    if count_values == [4, 1]:
+        four = max(rank for rank, count in counts.items() if count == 4)
+        kicker = max(rank for rank, count in counts.items() if count == 1)
+        return 7, [four, kicker]
+
+    if count_values == [3, 2]:
+        three = max(rank for rank, count in counts.items() if count == 3)
+        pair = max(rank for rank, count in counts.items() if count == 2)
+        return 6, [three, pair]
+
+    if is_flush:
+        return 5, ranks
+
+    if is_straight:
+        return 4, [high_straight]
+
+    if count_values == [3, 1, 1]:
+        three = max(rank for rank, count in counts.items() if count == 3)
+        kickers = sorted(
+            [rank for rank, count in counts.items() if count == 1],
+            reverse=True,
+        )
+        return 3, [three] + kickers
+
+    if count_values == [2, 2, 1]:
+        pairs = sorted(
+            [rank for rank, count in counts.items() if count == 2],
+            reverse=True,
+        )
+        kicker = max(rank for rank, count in counts.items() if count == 1)
+        return 2, pairs + [kicker]
+
+    if count_values == [2, 1, 1, 1]:
+        pair = max(rank for rank, count in counts.items() if count == 2)
+        kickers = sorted(
+            [rank for rank, count in counts.items() if count == 1],
+            reverse=True,
+        )
+        return 1, [pair] + kickers
+
+    return 0, ranks
+
+
+def _best_hand(cards7):
+    best = None
+    for combo in combinations(cards7, 5):
+        score = _evaluate_5(combo)
+        if best is None or score > best:
+            best = score
+    return best
 
 
 @dataclass
@@ -263,11 +375,35 @@ def _finish_round(state: RoomPokerState) -> None:
     final_status = "Round complete."
 
     if active:
-        winner_id = random.choice(active)
+        results = []
+
+        for pid in active:
+            player = state.players[pid]
+            parsed_cards = [_parse_card(card) for card in (player.cards + state.community_cards)]
+            best_hand = _best_hand(parsed_cards)
+            results.append((pid, best_hand))
+
+        results.sort(key=lambda item: item[1], reverse=True)
+        winner_id, best_hand = results[0]
+
         winner = state.players[winner_id]
         winnings = state.pot
         winner.chips += winnings
-        final_status = f"{winner.name} wins {winnings} chips!"
+
+        hand_rank_names = [
+            "High Card",
+            "Pair",
+            "Two Pair",
+            "Three of a Kind",
+            "Straight",
+            "Flush",
+            "Full House",
+            "Four of a Kind",
+            "Straight Flush",
+        ]
+
+        hand_name = hand_rank_names[best_hand[0]]
+        final_status = f"{winner.name} wins {winnings} chips with {hand_name}!"
 
     _reset_round_state(state)
     state.status = final_status
