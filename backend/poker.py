@@ -143,6 +143,7 @@ class RoomPokerState:
     host_player_id: Optional[str] = None
     status: str = "Waiting for players"
     game_started: bool = False
+    round_over: bool = False
     phase: str = "waiting"
     deck: List[str] = field(default_factory=list)
     community_cards: List[str] = field(default_factory=list)
@@ -150,6 +151,8 @@ class RoomPokerState:
     current_turn_player_id: Optional[str] = None
     pot: int = 0
     current_bet: int = 0
+    winner_player_id: Optional[str] = None
+    winning_hand_name: Optional[str] = None
 
 
 _room_poker_games: Dict[str, RoomPokerState] = {}
@@ -169,12 +172,11 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPoker
         return state
 
     player = PokerPlayerState(id=player_id, name=player_name)
-
     state.players[player_id] = player
     state.player_order.append(player_id)
 
     if not state.host_player_id:
-        state.host_player_id = player_id
+      state.host_player_id = player_id
 
     state.status = f"{player_name} joined the table."
     return state
@@ -226,12 +228,15 @@ def start_room_game(room_id: str) -> RoomPokerState:
 
     state.deck = _new_deck()
     state.game_started = True
+    state.round_over = False
     state.phase = "preflop"
     state.community_cards = []
     state.turn_index = 0
     state.current_turn_player_id = None
     state.pot = 0
     state.current_bet = 0
+    state.winner_player_id = None
+    state.winning_hand_name = None
 
     for pid in state.player_order:
         player = state.players[pid]
@@ -355,6 +360,7 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
 
 def _reset_round_state(state: RoomPokerState) -> None:
     state.game_started = False
+    state.round_over = False
     state.phase = "waiting"
     state.deck = []
     state.community_cards = []
@@ -362,6 +368,8 @@ def _reset_round_state(state: RoomPokerState) -> None:
     state.current_turn_player_id = None
     state.pot = 0
     state.current_bet = 0
+    state.winner_player_id = None
+    state.winning_hand_name = None
 
     for player in state.players.values():
         player.cards = []
@@ -373,6 +381,16 @@ def _reset_round_state(state: RoomPokerState) -> None:
 def _finish_round(state: RoomPokerState) -> None:
     active = _active_player_ids(state)
     final_status = "Round complete."
+
+    state.game_started = False
+    state.round_over = True
+    state.phase = "showdown"
+    state.current_turn_player_id = None
+    state.current_bet = 0
+
+    for player in state.players.values():
+        player.has_acted_this_round = False
+        player.current_bet = 0
 
     if active:
         results = []
@@ -403,9 +421,12 @@ def _finish_round(state: RoomPokerState) -> None:
         ]
 
         hand_name = hand_rank_names[best_hand[0]]
+
+        state.winner_player_id = winner_id
+        state.winning_hand_name = hand_name
         final_status = f"{winner.name} wins {winnings} chips with {hand_name}!"
 
-    _reset_round_state(state)
+    state.pot = 0
     state.status = final_status
 
 
@@ -415,7 +436,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
     if not state.game_started:
         raise ValueError("Round has not started.")
 
-    if state.phase == "waiting":
+    if state.round_over or state.phase == "waiting":
         raise ValueError("No player actions are allowed right now.")
 
     if player_id != state.current_turn_player_id:
@@ -523,8 +544,11 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         "turn_player_id": state.current_turn_player_id,
         "status": state.status,
         "game_started": state.game_started,
+        "round_over": state.round_over,
         "phase": state.phase,
         "community_cards": state.community_cards,
         "pot": state.pot,
         "current_bet": state.current_bet,
+        "winner_player_id": state.winner_player_id,
+        "winning_hand_name": state.winning_hand_name,
     }
