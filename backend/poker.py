@@ -546,24 +546,40 @@ def _finish_round(state: RoomPokerState) -> None:
 
         for pid in active:
             player = state.players[pid]
-            parsed_cards = [_parse_card(card) for card in (player.cards + state.community_cards)]
+            parsed_cards = [
+                _parse_card(card)
+                for card in (player.cards + state.community_cards)
+            ]
             best_hand = _best_hand(parsed_cards)
             results.append((pid, best_hand))
 
         results.sort(key=lambda item: item[1], reverse=True)
 
-        winner_id, best_hand = results[0]
-        winner = state.players[winner_id]
-        winnings = state.pot
-        winner.chips += winnings
+        best_score = results[0][1]
 
-        state.winner_player_id = winner_id
-        state.winning_hand_name = HAND_RANK_NAMES[best_hand[0]]
+        winners = [pid for pid, score in results if score == best_score]
+
+        split_amount = state.pot // len(winners)
+
+        for pid in winners:
+            state.players[pid].chips += split_amount
+
+        remainder = state.pot % len(winners)
+        if remainder > 0:
+            state.players[winners[0]].chips += remainder
+
+        state.winner_player_id = winners[0]
+        state.winning_hand_name = HAND_RANK_NAMES[best_score[0]]
 
         for pid, hand in results:
             state.players[pid].hand_name = HAND_RANK_NAMES[hand[0]]
 
-        final_status = f"{winner.name} wins {winnings} chips with {state.winning_hand_name}!"
+        if len(winners) == 1:
+            winner = state.players[winners[0]]
+            final_status = f"{winner.name} wins {state.pot} chips with {state.winning_hand_name}!"
+        else:
+            winner_names = ", ".join(state.players[pid].name for pid in winners)
+            final_status = f"Tie between {winner_names}. Pot split ({split_amount} each) with {state.winning_hand_name}."
 
     state.pot = 0
     state.status = final_status

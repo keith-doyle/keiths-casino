@@ -266,6 +266,30 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     );
   }
 
+  Widget _buildSmallCards(List<String> cards) {
+    if (cards.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: cards
+            .map(
+              (c) => Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: PlayingCardWidget(
+              cardId: c,
+              width: 42,
+              height: 62,
+            ),
+          ),
+        )
+            .toList(),
+      ),
+    );
+  }
+
   Widget _buildPlayerCard(Map<String, dynamic> player) {
     final id = player["id"];
     final isTurn = id == _turnPlayerId;
@@ -278,6 +302,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final handName = (player["hand_name"] ?? '').toString();
     final chips = ((player["chips"] ?? 0) as num).toInt();
     final currentBet = ((player["current_bet"] ?? 0) as num).toInt();
+    final cards = List<String>.from(player["cards"] ?? []);
 
     String subtitle = 'Chips: $chips • Bet: $currentBet';
     if (folded) {
@@ -294,19 +319,35 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           : isWinner
           ? Colors.green.withOpacity(0.18)
           : Colors.white,
-      child: ListTile(
-        title: Text((player["name"] ?? 'Player').toString()),
-        subtitle: Text(subtitle),
-        trailing: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
           children: [
-            if (isDealer) _badge('D', Colors.orange),
-            if (isSmallBlind) _badge('SB', Colors.blue),
-            if (isBigBlind) _badge('BB', Colors.red),
-            if (isWinner) _badge('WIN', Colors.green),
-            if (isYou) _badge('YOU', Colors.deepPurple),
+            ListTile(
+              title: Text((player["name"] ?? 'Player').toString()),
+              subtitle: Text(subtitle),
+              trailing: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (isDealer) _badge('D', Colors.orange),
+                  if (isSmallBlind) _badge('SB', Colors.blue),
+                  if (isBigBlind) _badge('BB', Colors.red),
+                  if (isWinner) _badge('WIN', Colors.green),
+                  if (isYou) _badge('YOU', Colors.deepPurple),
+                ],
+              ),
+            ),
+            if (_roundOver && cards.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildSmallCards(cards),
+                ),
+              ),
+            ],
           ],
         ),
       ),
