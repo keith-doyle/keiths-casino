@@ -40,6 +40,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   String? _winnerPlayerId;
   String? _winningHandName;
 
+  String? _dealerPlayerId;
+  String? _smallBlindPlayerId;
+  String? _bigBlindPlayerId;
+  int _smallBlindAmount = 0;
+  int _bigBlindAmount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -83,10 +89,14 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
         if (type == "error") {
           if (!mounted) return;
+          final errorText = (msg["status"] ?? "Unknown error").toString();
           setState(() {
-            _status = (msg["status"] ?? "Unknown error").toString();
+            _status = errorText;
             _busy = false;
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorText)),
+          );
           return;
         }
 
@@ -105,6 +115,15 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             _currentBet = ((msg["current_bet"] ?? 0) as num).toInt();
             _winnerPlayerId = msg["winner_player_id"]?.toString();
             _winningHandName = msg["winning_hand_name"]?.toString();
+
+            _dealerPlayerId = msg["dealer_player_id"]?.toString();
+            _smallBlindPlayerId = msg["small_blind_player_id"]?.toString();
+            _bigBlindPlayerId = msg["big_blind_player_id"]?.toString();
+            _smallBlindAmount =
+                ((msg["small_blind_amount"] ?? 0) as num).toInt();
+            _bigBlindAmount =
+                ((msg["big_blind_amount"] ?? 0) as num).toInt();
+
             _busy = false;
           });
           return;
@@ -119,9 +138,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       onError: (e) {
         if (!mounted) return;
         setState(() {
-          _status = "WS error: $e";
+          _status = "Connection error: $e";
           _busy = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Connection error: $e")),
+        );
       },
       onDone: () {
         if (!mounted) return;
@@ -139,45 +161,75 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
   Map<String, dynamic>? get _myPlayer {
     try {
-      return _players.firstWhere((p) => (p["id"] ?? "").toString() == widget.playerId);
+      return _players.firstWhere((p) => p["id"] == widget.playerId);
     } catch (_) {
       return null;
     }
   }
 
   List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
-  int get _myChips => (((_myPlayer?["chips"] ?? 0) as num).toInt());
-  int get _myCurrentBet => (((_myPlayer?["current_bet"] ?? 0) as num).toInt());
-
-  String _phaseLabel() {
-    return _phase.toUpperCase();
-  }
+  int get _myChips => ((_myPlayer?["chips"] ?? 0) as num).toInt();
+  int get _myCurrentBet => ((_myPlayer?["current_bet"] ?? 0) as num).toInt();
 
   void _sendAction(String action, {int amount = 0}) {
+    if (_busy || !_isMyTurn || _roundOver || !_gameStarted) return;
+
+    setState(() => _busy = true);
+
     _ws.sendJson({
       "type": "action",
       "action": action,
       "amount": amount,
     });
+
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    });
   }
 
   String _turnLabel() {
     if (_roundOver) return 'Round complete';
-    if (!_gameStarted) return 'Waiting to start';
+    if (!_gameStarted) {
+      return _players.length < 2
+          ? 'Waiting for more players'
+          : (_isHost ? 'You can start the round' : 'Waiting for host to start');
+    }
     if (_turnPlayerId == null) return 'No active turn';
+
     try {
-      final player = _players.firstWhere(
-            (p) => (p["id"] ?? "").toString() == _turnPlayerId,
-      );
+      final player = _players.firstWhere((p) => p["id"] == _turnPlayerId);
       final name = (player["name"] ?? 'Player').toString();
-      return _isMyTurn ? 'Your turn' : '$name\'s turn';
+      return _isMyTurn ? 'Your turn - act now' : 'Waiting for $name';
     } catch (_) {
       return 'Turn active';
     }
   }
 
+  String _buildStatusText() {
+    if (_roundOver) return _winnerLabel();
+
+    switch (_phase) {
+      case 'preflop':
+        return 'Preflop betting';
+      case 'flop':
+        return 'Flop betting';
+      case 'turn':
+        return 'Turn betting';
+      case 'river':
+        return 'River betting';
+      default:
+        if (!_gameStarted) {
+          return _players.length < 2
+              ? 'Waiting for players to join the table'
+              : 'Ready to start the round';
+        }
+        return _status;
+    }
+  }
+
   String _winnerLabel() {
-    if (!_roundOver || _winnerPlayerId == null) return '';
     if (_iWon) {
       return _winningHandName == null
           ? 'You won the round'
@@ -185,186 +237,141 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     }
 
     try {
-      final winner = _players.firstWhere(
-            (p) => (p["id"] ?? "").toString() == _winnerPlayerId,
-      );
-      final winnerName = (winner["name"] ?? 'Player').toString();
+      final winner =
+      _players.firstWhere((p) => p["id"] == _winnerPlayerId);
+      final name = (winner["name"] ?? 'Player').toString();
       return _winningHandName == null
-          ? '$winnerName won the round'
-          : '$winnerName won with $_winningHandName';
+          ? '$name won the round'
+          : '$name won with $_winningHandName';
     } catch (_) {
       return 'Round complete';
     }
   }
 
-  Widget _buildInfoPill(String text) {
+  Widget _badge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.10),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white24),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
           fontWeight: FontWeight.w700,
+          color: color,
+          fontSize: 11,
         ),
-      ),
-    );
-  }
-
-  Widget _buildFanHand(
-      List<String> cards, {
-        required double cardWidth,
-        required double cardHeight,
-        required double overlap,
-      }) {
-    if (cards.isEmpty) {
-      return SizedBox(
-        height: cardHeight,
-        child: const Center(
-          child: Text(
-            'No cards yet',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ),
-      );
-    }
-
-    final visibleWidth = cardWidth + ((cards.length - 1) * overlap);
-
-    return SizedBox(
-      width: visibleWidth,
-      height: cardHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: List.generate(cards.length, (i) {
-          return Positioned(
-            left: i * overlap,
-            child: PlayingCardWidget(
-              cardId: cards[i],
-              width: cardWidth,
-              height: cardHeight,
-            ),
-          );
-        }),
       ),
     );
   }
 
   Widget _buildPlayerCard(Map<String, dynamic> player) {
-    final playerId = (player["id"] ?? "").toString();
-    final name = (player["name"] ?? "Player").toString();
-    final isYou = playerId == widget.playerId;
-    final isHost = playerId == _hostPlayerId;
-    final isTurn = playerId == _turnPlayerId;
-    final isWinner = playerId == _winnerPlayerId;
+    final id = player["id"];
+    final isTurn = id == _turnPlayerId;
+    final isDealer = id == _dealerPlayerId;
+    final isSmallBlind = id == _smallBlindPlayerId;
+    final isBigBlind = id == _bigBlindPlayerId;
+    final isWinner = id == _winnerPlayerId;
+    final isYou = id == widget.playerId;
     final folded = (player["folded"] ?? false) as bool;
-    final acted = (player["has_acted_this_round"] ?? false) as bool;
-    final cardCount = ((player["card_count"] ?? 0) as num).toInt();
+    final handName = (player["hand_name"] ?? '').toString();
     final chips = ((player["chips"] ?? 0) as num).toInt();
     final currentBet = ((player["current_bet"] ?? 0) as num).toInt();
-    final handName = (player["hand_name"] ?? "").toString();
 
-    String subtitle = folded
-        ? 'Folded • Chips: $chips'
-        : 'Cards: $cardCount • Chips: $chips • Bet: $currentBet';
-
-    if (_roundOver && handName.isNotEmpty) {
+    String subtitle = 'Chips: $chips • Bet: $currentBet';
+    if (folded) {
+      subtitle = 'Folded • Chips: $chips • Bet: $currentBet';
+    } else if (_roundOver && handName.isNotEmpty) {
       subtitle = '$handName • Chips: $chips';
-    } else if (!folded && acted && _gameStarted) {
-      subtitle = 'Acted • Cards: $cardCount • Chips: $chips • Bet: $currentBet';
+    } else if (isTurn) {
+      subtitle = 'Act now • Chips: $chips • Bet: $currentBet';
     }
 
     return Card(
-      color: isWinner
-          ? Colors.green.withOpacity(0.30)
-          : Colors.white.withOpacity(0.95),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: isWinner ? Colors.green : Colors.transparent,
-          width: isWinner ? 1.5 : 0,
-        ),
-      ),
+      color: isTurn
+          ? Colors.green.withOpacity(0.25)
+          : isWinner
+          ? Colors.green.withOpacity(0.18)
+          : Colors.white,
       child: ListTile(
-        leading: const Icon(Icons.person),
-        title: Text(name),
+        title: Text((player["name"] ?? 'Player').toString()),
         subtitle: Text(subtitle),
         trailing: Wrap(
           spacing: 8,
+          runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (isWinner)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  'WINNER',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.green,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            if (isHost)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  'HOST',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.deepPurple,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            if (isTurn)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  'TURN',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.green,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            if (isYou)
-              const Text(
-                'YOU',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.deepPurple,
-                ),
-              ),
+            if (isDealer) _badge('D', Colors.orange),
+            if (isSmallBlind) _badge('SB', Colors.blue),
+            if (isBigBlind) _badge('BB', Colors.red),
+            if (isWinner) _badge('WIN', Colors.green),
+            if (isYou) _badge('YOU', Colors.deepPurple),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildControls() {
+  Widget _buildCommunityCards() {
+    if (_communityCards.isEmpty) {
+      return const Text(
+        'No community cards yet',
+        style: TextStyle(color: Colors.white70),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: _communityCards
+            .map(
+              (c) => Padding(
+            padding: const EdgeInsets.all(4),
+            child: PlayingCardWidget(cardId: c),
+          ),
+        )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildMyCards() {
+    if (_myCards.isEmpty) {
+      return const Text(
+        'No hole cards yet',
+        style: TextStyle(color: Colors.white70),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: _myCards
+            .map(
+              (c) => Padding(
+            padding: const EdgeInsets.all(4),
+            child: PlayingCardWidget(cardId: c),
+          ),
+        )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildPrimaryActionArea() {
     if (_roundOver) {
       return SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
+          onPressed: _busy || !_isHost || _players.length < 2
+              ? null
+              : () {
+            setState(() => _busy = true);
+            _ws.sendStart();
+          },
           icon: const Icon(Icons.replay),
           label: Text(
             _isHost ? 'Start New Round' : 'Waiting for host',
@@ -377,7 +384,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       return SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed: _busy || !_isHost || _players.length < 2 ? null : _ws.sendStart,
+          onPressed: _busy || !_isHost || _players.length < 2
+              ? null
+              : () {
+            setState(() => _busy = true);
+            _ws.sendStart();
+          },
           icon: const Icon(Icons.play_arrow),
           label: Text(
             _players.length < 2
@@ -388,66 +400,71 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       );
     }
 
-    if (_isMyTurn) {
-      final canCheck = _currentBet == _myCurrentBet;
-      final raiseAmount = _currentBet + 50;
-      final canRaise = _myChips >= (raiseAmount - _myCurrentBet);
-      final canCall = _myChips >= (_currentBet - _myCurrentBet);
-
-      return Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy || !canCheck ? null : () => _sendAction('check'),
-                  icon: const Icon(Icons.check),
-                  label: const Text('Check'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy || !canCall ? null : () => _sendAction('call'),
-                  icon: const Icon(Icons.call_made),
-                  label: const Text('Call'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : () => _sendAction('fold'),
-                  icon: const Icon(Icons.close),
-                  label: const Text('Fold'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy || !canRaise
-                      ? null
-                      : () => _sendAction('raise', amount: raiseAmount),
-                  icon: const Icon(Icons.arrow_upward),
-                  label: Text('Raise to $raiseAmount'),
-                ),
-              ),
-            ],
-          ),
-        ],
+    if (!_isMyTurn) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: null,
+          icon: const Icon(Icons.hourglass_bottom),
+          label: Text(_turnLabel()),
+        ),
       );
     }
 
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: null,
-        icon: const Icon(Icons.hourglass_bottom),
-        label: Text(_turnLabel()),
-      ),
+    final toCall = _currentBet - _myCurrentBet;
+    final canCheck = toCall == 0;
+    final canCall = toCall > 0 && _myChips > 0;
+    final raiseAmount = _currentBet + 50;
+    final canRaise = _myChips >= (raiseAmount - _myCurrentBet);
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy || !canCheck
+                    ? null
+                    : () => _sendAction('check'),
+                icon: const Icon(Icons.check),
+                label: const Text('Check'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy || !canCall
+                    ? null
+                    : () => _sendAction('call'),
+                icon: const Icon(Icons.call_made),
+                label: Text(canCall ? 'Call $toCall' : 'Call'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy ? null : () => _sendAction('fold'),
+                icon: const Icon(Icons.close),
+                label: const Text('Fold'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy || !canRaise
+                    ? null
+                    : () => _sendAction('raise', amount: raiseAmount),
+                icon: const Icon(Icons.arrow_upward),
+                label: Text('Raise to $raiseAmount'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -460,6 +477,11 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final headerTextStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+      color: Colors.white,
+      fontWeight: FontWeight.w700,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Poker Table (${widget.roomId})'),
@@ -488,10 +510,11 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _buildInfoPill('Room ${widget.roomId}'),
-                    _buildInfoPill('Players: ${_players.length}'),
-                    _buildInfoPill(_isHost ? 'Host: You' : 'Host assigned'),
-                    _buildInfoPill('Phase: ${_phaseLabel()}'),
+                    _badge('Room ${widget.roomId}', Colors.white),
+                    _badge('Players ${_players.length}', Colors.white),
+                    _badge('Blinds $_smallBlindAmount / $_bigBlindAmount',
+                        Colors.white),
+                    _badge('Phase ${_phase.toUpperCase()}', Colors.white),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -507,7 +530,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     border: Border.all(color: Colors.white24),
                   ),
                   child: Text(
-                    _status,
+                    _buildStatusText(),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -515,29 +538,6 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     ),
                   ),
                 ),
-                if (_roundOver && _winnerPlayerId != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.green.withOpacity(0.45)),
-                    ),
-                    child: Text(
-                      _winnerLabel(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
@@ -559,10 +559,35 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                     ),
                   ),
                 ),
+                if (_roundOver && _winnerPlayerId != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border:
+                      Border.all(color: Colors.green.withOpacity(0.45)),
+                    ),
+                    child: Text(
+                      _winnerLabel(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(16),
@@ -570,24 +595,9 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'Community Cards',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
+                      Text('Community Cards', style: headerTextStyle),
                       const SizedBox(height: 10),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _buildFanHand(
-                          _communityCards,
-                          cardWidth: 58,
-                          cardHeight: 88,
-                          overlap: 24,
-                        ),
-                      ),
+                      _buildCommunityCards(),
                       const SizedBox(height: 10),
                       Text(
                         'Pot: $_pot',
@@ -610,7 +620,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(16),
@@ -618,24 +629,9 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'Your Hole Cards',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
+                      Text('Your Hole Cards', style: headerTextStyle),
                       const SizedBox(height: 10),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _buildFanHand(
-                          _myCards,
-                          cardWidth: 64,
-                          cardHeight: 96,
-                          overlap: 30,
-                        ),
-                      ),
+                      _buildMyCards(),
                       const SizedBox(height: 10),
                       Text(
                         'Your chips: $_myChips • Your bet: $_myCurrentBet',
@@ -652,7 +648,9 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   child: _players.isEmpty
                       ? Center(
                     child: Text(
-                      _busy ? 'Joining poker table...' : 'No players connected',
+                      _busy
+                          ? 'Joining poker table...'
+                          : 'No players connected',
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 16,
@@ -662,13 +660,11 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
                   )
                       : ListView.builder(
                     itemCount: _players.length,
-                    itemBuilder: (context, index) {
-                      return _buildPlayerCard(_players[index]);
-                    },
+                    itemBuilder: (_, i) => _buildPlayerCard(_players[i]),
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildControls(),
+                _buildPrimaryActionArea(),
               ],
             ),
           ),
