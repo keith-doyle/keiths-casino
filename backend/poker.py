@@ -289,14 +289,35 @@ def _next_active_player_after_index(state: RoomPokerState, start_index: int) -> 
     return None
 
 
-def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomPokerState:
+def _first_active_after_dealer(state: RoomPokerState) -> Optional[str]:
+    if state.dealer_player_id and state.dealer_player_id in state.player_order:
+        dealer_index = state.player_order.index(state.dealer_player_id)
+        return _next_active_player_after_index(state, dealer_index)
+    return _first_active_player_id(state)
+
+
+def add_room_player(
+    room_id: str,
+    player_id: str,
+    player_name: str,
+    chips: int = 1000,
+) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
     if player_id in state.players:
         state.players[player_id].name = player_name or state.players[player_id].name
+
+        if chips >= 0:
+            state.players[player_id].chips = chips
+
         return state
 
-    player = PokerPlayerState(id=player_id, name=player_name)
+    player = PokerPlayerState(
+        id=player_id,
+        name=player_name,
+        chips=chips,
+    )
+
     state.players[player_id] = player
     state.player_order.append(player_id)
 
@@ -358,6 +379,11 @@ def start_room_game(room_id: str) -> RoomPokerState:
 
     if len(state.player_order) < 2:
         raise ValueError("At least 2 players are required to start.")
+
+    for pid in state.player_order:
+        player = state.players[pid]
+        if player.chips <= 0:
+            raise ValueError(f"{player.name} has no chips and cannot start.")
 
     _rotate_dealer_and_blinds(state)
 
@@ -462,6 +488,9 @@ def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
         if not player:
             return False
 
+        if not player.has_acted_this_round and player.chips > 0:
+            return False
+
         if player.current_bet != state.current_bet and player.chips > 0:
             return False
 
@@ -481,7 +510,7 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         _deal_community_cards(state, 3)
         state.phase = "flop"
         _reset_action_flags(state)
-        state.current_turn_player_id = _first_active_player_id(state)
+        state.current_turn_player_id = _first_active_after_dealer(state)
         state.status = "Flop dealt."
         return
 
@@ -489,7 +518,7 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         _deal_community_cards(state, 1)
         state.phase = "turn"
         _reset_action_flags(state)
-        state.current_turn_player_id = _first_active_player_id(state)
+        state.current_turn_player_id = _first_active_after_dealer(state)
         state.status = "Turn dealt."
         return
 
@@ -497,7 +526,7 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         _deal_community_cards(state, 1)
         state.phase = "river"
         _reset_action_flags(state)
-        state.current_turn_player_id = _first_active_player_id(state)
+        state.current_turn_player_id = _first_active_after_dealer(state)
         state.status = "River dealt."
         return
 

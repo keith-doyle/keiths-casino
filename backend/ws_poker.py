@@ -77,7 +77,17 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
                 if not player_name:
                     player_name = player_id[:6]
 
-                poker.add_room_player(room_id, player_id, player_name)
+                try:
+                    coins = int(msg.get("coins", 1000) or 1000)
+                except Exception:
+                    coins = 1000
+
+                poker.add_room_player(
+                    room_id=room_id,
+                    player_id=player_id,
+                    player_name=player_name,
+                    chips=coins,
+                )
                 room[websocket] = player_id
 
                 await _broadcast(room_id)

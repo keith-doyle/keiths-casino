@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/blackjack_ws_service.dart';
@@ -34,6 +36,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   bool _busy = true;
   bool _gameStarted = false;
   bool _roundOver = false;
+  bool _savedThisRound = false;
+
   String _phase = 'waiting';
   int _pot = 0;
   int _currentBet = 0;
@@ -46,17 +50,38 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   int _smallBlindAmount = 0;
   int _bigBlindAmount = 0;
 
+  int _coins = 0;
+
   @override
   void initState() {
     super.initState();
-    _connectAndListen();
+    _loadCoins().then((_) {
+      _connectAndListen();
+    });
+  }
+
+  Future<void> _loadCoins() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      final data = doc.data();
+      if (!mounted) return;
+
+      setState(() {
+        _coins = ((data?['coins'] ?? 0) as num).toInt();
+      });
+    } catch (_) {}
   }
 
   void _connectAndListen() {
     _ws.connectToPokerTable(roomId: widget.roomId);
 
     _sub = _ws.stream?.listen(
-          (event) {
+          (event) async {
         final text = event is String ? event : event.toString();
 
         Map<String, dynamic> msg;
@@ -74,10 +99,12 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         final type = msg["type"];
 
         if (type == "system") {
-          _ws.join(
-            playerId: widget.playerId,
-            playerName: widget.playerName,
-          );
+          _ws.sendJson({
+            "type": "join",
+            "player_id": widget.playerId,
+            "player_name": widget.playerName,
+            "coins": _coins,
+          });
 
           if (!mounted) return;
           setState(() {
@@ -101,6 +128,8 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         }
 
         if (type == "table_state") {
+          final previousRoundOver = _roundOver;
+
           if (!mounted) return;
           setState(() {
             _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
@@ -126,6 +155,28 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
 
             _busy = false;
           });
+
+          // Round reset
+          if (!_roundOver) {
+            _savedThisRound = false;
+          }
+
+          // Save exactly once when a round transitions into round_over
+          if (!previousRoundOver && _roundOver && !_savedThisRound) {
+            final me = _myPlayer;
+            if (me != null) {
+              _savedThisRound = true;
+              try {
+                await _savePokerMatchStatsAndCoins();
+              } catch (e) {
+                if (!mounted) return;
+                setState(() {
+                  _status = "Poker match/stat save failed: $e";
+                });
+              }
+            }
+          }
+
           return;
         }
 
@@ -170,6 +221,134 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
   int get _myChips => ((_myPlayer?["chips"] ?? 0) as num).toInt();
   int get _myCurrentBet => ((_myPlayer?["current_bet"] ?? 0) as num).toInt();
+
+  Future<void> _savePokerMatchStatsAndCoins() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw Exception("Not signed in");
+
+    final me = _myPlayer;
+    if (me == null) throw Exception("Player state missing");
+
+    final resultStr = _iWon ? 'Win' : 'Loss';
+    final finalChips = _myChips;
+    final coinDelta = finalChips - _coins;
+
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final matchesRef = userRef.collection('matches');
+    final statsRef = userRef.collection('stats').doc('poker');
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final userSnap = await tx.get(userRef);
+      final statsSnap = await tx.get(statsRef);
+
+      int gamesPlayed = 0;
+      int wins = 0;
+      int losses = 0;
+
+      int coinsWon = 0;
+      int coinsLost = 0;
+      int netCoins = 0;
+
+      int currentWinStreak = 0;
+      int bestWinStreak = 0;
+
+      int highestPotSeen = 0;
+
+      if (statsSnap.exists) {
+        final existing = statsSnap.data() as Map<String, dynamic>;
+        gamesPlayed = ((existing['gamesPlayed'] ?? 0) as num).toInt();
+        wins = ((existing['wins'] ?? 0) as num).toInt();
+        losses = ((existing['losses'] ?? 0) as num).toInt();
+
+        coinsWon = ((existing['coinsWon'] ?? 0) as num).toInt();
+        coinsLost = ((existing['coinsLost'] ?? 0) as num).toInt();
+        netCoins = ((existing['netCoins'] ?? 0) as num).toInt();
+
+        currentWinStreak =
+            ((existing['currentWinStreak'] ?? 0) as num).toInt();
+        bestWinStreak = ((existing['bestWinStreak'] ?? 0) as num).toInt();
+
+        highestPotSeen = ((existing['highestPotSeen'] ?? 0) as num).toInt();
+      }
+
+      int persistedCoins = _coins;
+      if (userSnap.exists) {
+        final userData = userSnap.data() as Map<String, dynamic>;
+        persistedCoins = ((userData['coins'] ?? _coins) as num).toInt();
+      }
+
+      gamesPlayed += 1;
+
+      if (resultStr == 'Win') {
+        wins += 1;
+        currentWinStreak += 1;
+      } else {
+        losses += 1;
+        currentWinStreak = 0;
+      }
+
+      if (currentWinStreak > bestWinStreak) {
+        bestWinStreak = currentWinStreak;
+      }
+
+      if (coinDelta > 0) {
+        coinsWon += coinDelta;
+      } else if (coinDelta < 0) {
+        coinsLost += coinDelta.abs();
+      }
+
+      netCoins = coinsWon - coinsLost;
+
+      if (_pot > highestPotSeen) {
+        highestPotSeen = _pot;
+      }
+
+      // Use backend final chips as source of truth
+      final newCoins = finalChips < 0 ? 0 : finalChips;
+
+      final matchDoc = matchesRef.doc();
+      tx.set(matchDoc, {
+        'gameType': 'Poker',
+        'mode': 'multiplayer',
+        'result': resultStr,
+        'coinDelta': coinDelta,
+        'startingCoins': persistedCoins,
+        'endingCoins': newCoins,
+        'finalChips': finalChips,
+        'potAtEnd': _pot,
+        'roomId': widget.roomId,
+        'opponentCount': _players.where((p) => p["id"] != widget.playerId).length,
+        'winningHandName': _winningHandName,
+        'phaseEnded': _phase,
+        'playedAt': FieldValue.serverTimestamp(),
+      });
+
+      tx.set(statsRef, {
+        'gameType': 'Poker',
+        'gamesPlayed': gamesPlayed,
+        'wins': wins,
+        'losses': losses,
+        'coinsWon': coinsWon,
+        'coinsLost': coinsLost,
+        'netCoins': netCoins,
+        'currentWinStreak': currentWinStreak,
+        'bestWinStreak': bestWinStreak,
+        'highestPotSeen': highestPotSeen,
+        'lastPlayedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      tx.set(userRef, {
+        'coins': newCoins,
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          _coins = newCoins;
+        });
+      }
+    });
+  }
 
   void _sendAction(String action, {int amount = 0}) {
     if (_busy || !_isMyTurn || _roundOver || !_gameStarted) return;
@@ -237,8 +416,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     }
 
     try {
-      final winner =
-      _players.firstWhere((p) => p["id"] == _winnerPlayerId);
+      final winner = _players.firstWhere((p) => p["id"] == _winnerPlayerId);
       final name = (winner["name"] ?? 'Player').toString();
       return _winningHandName == null
           ? '$name won the round'
@@ -326,17 +504,20 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             ListTile(
               title: Text((player["name"] ?? 'Player').toString()),
               subtitle: Text(subtitle),
-              trailing: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (isDealer) _badge('D', Colors.orange),
-                  if (isSmallBlind) _badge('SB', Colors.blue),
-                  if (isBigBlind) _badge('BB', Colors.red),
-                  if (isWinner) _badge('WIN', Colors.green),
-                  if (isYou) _badge('YOU', Colors.deepPurple),
-                ],
+              trailing: SizedBox(
+                width: 110,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (isDealer) _badge('D', Colors.orange),
+                    if (isSmallBlind) _badge('SB', Colors.blue),
+                    if (isBigBlind) _badge('BB', Colors.red),
+                    if (isWinner) _badge('WIN', Colors.green),
+                    if (isYou) _badge('YOU', Colors.deepPurple),
+                  ],
+                ),
               ),
             ),
             if (_roundOver && cards.isNotEmpty) ...[
@@ -370,7 +551,11 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             .map(
               (c) => Padding(
             padding: const EdgeInsets.all(4),
-            child: PlayingCardWidget(cardId: c),
+            child: PlayingCardWidget(
+              cardId: c,
+              width: 58,
+              height: 86,
+            ),
           ),
         )
             .toList(),
@@ -394,7 +579,11 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
             .map(
               (c) => Padding(
             padding: const EdgeInsets.all(4),
-            child: PlayingCardWidget(cardId: c),
+            child: PlayingCardWidget(
+              cardId: c,
+              width: 58,
+              height: 86,
+            ),
           ),
         )
             .toList(),
@@ -542,172 +731,192 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _badge('Room ${widget.roomId}', Colors.white),
-                    _badge('Players ${_players.length}', Colors.white),
-                    _badge('Blinds $_smallBlindAmount / $_bigBlindAmount',
-                        Colors.white),
-                    _badge('Phase ${_phase.toUpperCase()}', Colors.white),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Text(
-                    _buildStatusText(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Text(
-                    _turnLabel(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: _isMyTurn ? Colors.green.shade300 : Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                if (_roundOver && _winnerPlayerId != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border:
-                      Border.all(color: Colors.green.withOpacity(0.45)),
-                    ),
-                    child: Text(
-                      _winnerLabel(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24),
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Community Cards', style: headerTextStyle),
-                      const SizedBox(height: 10),
-                      _buildCommunityCards(),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Pot: $_pot',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _badge('Room ${widget.roomId}', Colors.white),
+                          _badge('Players ${_players.length}', Colors.white),
+                          _badge(
+                            'Blinds $_smallBlindAmount / $_bigBlindAmount',
+                            Colors.white,
+                          ),
+                          _badge('Phase ${_phase.toUpperCase()}', Colors.white),
+                          _badge('Coins $_coins', Colors.white),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Text(
+                          _buildStatusText(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Current bet: $_currentBet',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Text(
+                          _turnLabel(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _isMyTurn ? Colors.green.shade300 : Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
+                      if (_roundOver && _winnerPlayerId != null) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.green.withOpacity(0.45),
+                            ),
+                          ),
+                          child: Text(
+                            _winnerLabel(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Column(
+                          children: [
+                            Text('Community Cards', style: headerTextStyle),
+                            const SizedBox(height: 10),
+                            _buildCommunityCards(),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Pot: $_pot',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Current bet: $_currentBet',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Column(
+                          children: [
+                            Text('Your Hole Cards', style: headerTextStyle),
+                            const SizedBox(height: 10),
+                            _buildMyCards(),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Your table chips: $_myChips • Your bet: $_myCurrentBet',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_players.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text(
+                              _busy
+                                  ? 'Joining poker table...'
+                                  : 'No players connected',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          itemCount: _players.length,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemBuilder: (_, i) => _buildPlayerCard(_players[i]),
+                        ),
+                      const SizedBox(height: 12),
+                      _buildPrimaryActionArea(),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    children: [
-                      Text('Your Hole Cards', style: headerTextStyle),
-                      const SizedBox(height: 10),
-                      _buildMyCards(),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Your chips: $_myChips • Your bet: $_myCurrentBet',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: _players.isEmpty
-                      ? Center(
-                    child: Text(
-                      _busy
-                          ? 'Joining poker table...'
-                          : 'No players connected',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  )
-                      : ListView.builder(
-                    itemCount: _players.length,
-                    itemBuilder: (_, i) => _buildPlayerCard(_players[i]),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildPrimaryActionArea(),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
