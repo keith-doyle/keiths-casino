@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/info_stat_tile.dart';
+import '../widgets/section_card.dart';
+
 class StatsScreen extends StatelessWidget {
   const StatsScreen({super.key});
 
@@ -13,62 +16,6 @@ class StatsScreen extends StatelessWidget {
   String _fmtDate(dynamic ts) {
     if (ts is! Timestamp) return '-';
     return ts.toDate().toLocal().toString().split('.').first;
-  }
-
-  Widget _statTile(String label, String value, {IconData? icon}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionCard({
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -118,193 +65,207 @@ class StatsScreen extends StatelessWidget {
           ((data?['bestWinStreak'] ?? 0) as num).toInt();
 
           final lastPlayedAt = data?['lastPlayedAt'];
-
           final winRate = _winRate(wins, gamesPlayed);
 
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             children: [
-              _sectionCard(
-                title: 'Blackjack Overview',
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Games',
-                          gamesPlayed.toString(),
-                          icon: Icons.sports_esports,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Win rate',
-                          '${winRate.toStringAsFixed(1)}%',
-                          icon: Icons.bar_chart,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Wins',
-                          wins.toString(),
-                          icon: Icons.emoji_events,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Losses',
-                          losses.toString(),
-                          icon: Icons.close,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Pushes',
-                          pushes.toString(),
-                          icon: Icons.horizontal_rule,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _sectionCard(
-                title: 'Economy',
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Coins won',
-                          coinsWon.toString(),
-                          icon: Icons.trending_up,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Coins lost',
-                          coinsLost.toString(),
-                          icon: Icons.trending_down,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Net coins',
-                          netCoins.toString(),
-                          icon: Icons.monetization_on,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Highest bet',
-                          highestBet.toString(),
-                          icon: Icons.casino,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _statTile(
-                    'Biggest win',
-                    biggestWin.toString(),
-                    icon: Icons.workspace_premium,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _sectionCard(
-                title: 'Mode Breakdown',
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Singleplayer games',
-                          singleplayerGames.toString(),
-                          icon: Icons.person,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Multiplayer games',
-                          multiplayerGames.toString(),
-                          icon: Icons.group,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Singleplayer wins',
-                          singleplayerWins.toString(),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Multiplayer wins',
-                          multiplayerWins.toString(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _sectionCard(
-                title: 'Streaks & Activity',
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _statTile(
-                          'Current streak',
-                          currentWinStreak.toString(),
-                          icon: Icons.local_fire_department,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _statTile(
-                          'Best streak',
-                          bestWinStreak.toString(),
-                          icon: Icons.star,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _statTile(
-                    'Last played',
-                    _fmtDate(lastPlayedAt),
-                    icon: Icons.schedule,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               Text(
-                'These stats update automatically when a blackjack hand ends.',
-                style: Theme.of(context).textTheme.bodySmall,
+                'Performance',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your blackjack stats update automatically as games finish.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 20),
+              SectionCard(
+                title: 'Blackjack Overview',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Games',
+                            value: gamesPlayed.toString(),
+                            icon: Icons.sports_esports,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Win rate',
+                            value: '${winRate.toStringAsFixed(1)}%',
+                            icon: Icons.bar_chart,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Wins',
+                            value: wins.toString(),
+                            icon: Icons.emoji_events_outlined,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Losses',
+                            value: losses.toString(),
+                            icon: Icons.close_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Pushes',
+                            value: pushes.toString(),
+                            icon: Icons.horizontal_rule_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Economy',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Coins won',
+                            value: coinsWon.toString(),
+                            icon: Icons.trending_up_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Coins lost',
+                            value: coinsLost.toString(),
+                            icon: Icons.trending_down_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Net coins',
+                            value: netCoins.toString(),
+                            icon: Icons.monetization_on_outlined,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Highest bet',
+                            value: highestBet.toString(),
+                            icon: Icons.casino_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    InfoStatTile(
+                      label: 'Biggest win',
+                      value: biggestWin.toString(),
+                      icon: Icons.workspace_premium_outlined,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Mode Breakdown',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Singleplayer games',
+                            value: singleplayerGames.toString(),
+                            icon: Icons.person_outline_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Multiplayer games',
+                            value: multiplayerGames.toString(),
+                            icon: Icons.groups_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Singleplayer wins',
+                            value: singleplayerWins.toString(),
+                            icon: Icons.sports_score_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Multiplayer wins',
+                            value: multiplayerWins.toString(),
+                            icon: Icons.military_tech_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SectionCard(
+                title: 'Streaks & Activity',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Current streak',
+                            value: currentWinStreak.toString(),
+                            icon: Icons.local_fire_department_outlined,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InfoStatTile(
+                            label: 'Best streak',
+                            value: bestWinStreak.toString(),
+                            icon: Icons.star_outline_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    InfoStatTile(
+                      label: 'Last played',
+                      value: _fmtDate(lastPlayedAt),
+                      icon: Icons.schedule_rounded,
+                    ),
+                  ],
+                ),
               ),
             ],
           );

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../widgets/empty_state_widget.dart';
+import '../widgets/section_card.dart';
+
 class MatchesScreen extends StatelessWidget {
   MatchesScreen({super.key});
 
@@ -36,7 +39,7 @@ class MatchesScreen extends StatelessWidget {
 
   Widget _metaChip(String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.05),
         borderRadius: BorderRadius.circular(999),
@@ -73,12 +76,17 @@ class MatchesScreen extends StatelessWidget {
           final docs = snap.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(child: Text("No matches yet."));
+            return const EmptyStateWidget(
+              icon: Icons.history_toggle_off_rounded,
+              title: 'No matches yet',
+              subtitle: 'Your completed games will appear here.',
+            );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
+          return ListView.separated(
+            padding: const EdgeInsets.all(20),
             itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, i) {
               final data = docs[i].data();
 
@@ -95,84 +103,52 @@ class MatchesScreen extends StatelessWidget {
               final opponentCount =
               ((data['opponentCount'] ?? 0) as num).toInt();
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 2),
-                            child: Icon(Icons.sports_esports),
+              return SectionCard(
+                title: gameType,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            played,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  gameType,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  played,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
+                        ),
+                        Text(
+                          result,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: _resultColor(result),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                result,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: _resultColor(result),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                coinDelta > 0
-                                    ? '+$coinDelta'
-                                    : coinDelta.toString(),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: _coinDeltaColor(coinDelta),
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          coinDelta > 0 ? '+$coinDelta' : coinDelta.toString(),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: _coinDeltaColor(coinDelta),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _metaChip('Mode: ${_modeLabel(mode)}'),
-                          _metaChip('Bet: $bet'),
-                          _metaChip('You: $playerTotal'),
-                          _metaChip('Dealer: $dealerTotal'),
-                          if (mode == 'multiplayer')
-                            _metaChip('Opponents: $opponentCount'),
-                          if (mode == 'multiplayer' && roomId.isNotEmpty)
-                            _metaChip('Room: $roomId'),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _metaChip('Mode: ${_modeLabel(mode)}'),
+                        _metaChip('Bet: $bet'),
+                        _metaChip('You: $playerTotal'),
+                        _metaChip('Dealer: $dealerTotal'),
+                        if (mode == 'multiplayer')
+                          _metaChip('Opponents: $opponentCount'),
+                        if (mode == 'multiplayer' && roomId.isNotEmpty)
+                          _metaChip('Room: $roomId'),
+                      ],
+                    ),
+                  ],
                 ),
               );
             },

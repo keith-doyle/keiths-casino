@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../widgets/empty_state_widget.dart';
+import '../widgets/section_card.dart';
 import 'blackjack_lobby_screen.dart';
 import 'poker_lobby_screen.dart';
 
@@ -57,7 +59,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _declineNotification(String notificationId, String successText) async {
+  Future<void> _declineNotification(
+      String notificationId,
+      String successText,
+      ) async {
     try {
       await _firestore
           .collection('users')
@@ -80,7 +85,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _joinGameInvite(String notificationId, String roomId, String game) async {
+  Future<void> _joinGameInvite(
+      String notificationId,
+      String roomId,
+      String game,
+      ) async {
     try {
       final normalizedRoomId = roomId.trim().toUpperCase();
 
@@ -188,111 +197,116 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           });
 
           if (docs.isEmpty) {
-            return const Center(
-              child: Text('No pending notifications.'),
+            return const EmptyStateWidget(
+              icon: Icons.notifications_none_rounded,
+              title: 'No pending notifications',
+              subtitle: 'Friend requests and game invites will appear here.',
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
+          return ListView.separated(
+            padding: const EdgeInsets.all(20),
             itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, i) {
               final doc = docs[i];
               final data = doc.data();
-
               final type = (data['type'] ?? '').toString();
 
               if (type == 'friend_request') {
-                final fromUsername = (data['fromUsername'] ?? 'Unknown').toString();
+                final fromUsername =
+                (data['fromUsername'] ?? 'Unknown').toString();
                 final fromUid = (data['fromUid'] ?? '').toString();
 
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$fromUsername sent you a friend request',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                return SectionCard(
+                  title: 'Friend Request',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$fromUsername sent you a friend request.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () =>
+                                  _acceptFriendRequest(doc.id, fromUid),
+                              child: const Text('Accept'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: () =>
-                                    _acceptFriendRequest(doc.id, fromUid),
-                                child: const Text('Accept'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _declineNotification(
+                                doc.id,
+                                'Friend request declined',
                               ),
+                              child: const Text('Decline'),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => _declineNotification(
-                                  doc.id,
-                                  'Friend request declined',
-                                ),
-                                child: const Text('Decline'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 );
               }
 
               if (type == 'game_invite') {
-                final fromUsername = (data['fromUsername'] ?? 'Unknown').toString();
+                final fromUsername =
+                (data['fromUsername'] ?? 'Unknown').toString();
                 final roomId = (data['roomId'] ?? '').toString();
                 final game = (data['game'] ?? 'game').toString();
 
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$fromUsername invited you to a ${game[0].toUpperCase()}${game.substring(1)} room',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
+                return SectionCard(
+                  title: 'Game Invite',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$fromUsername invited you to a ${game[0].toUpperCase()}${game.substring(1)} room.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
                         ),
-                        const SizedBox(height: 6),
-                        Text(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
                           'Room code: $roomId',
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: () => _joinGameInvite(doc.id, roomId, game),
-                                child: const Text('Join'),
-                              ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () =>
+                                  _joinGameInvite(doc.id, roomId, game),
+                              child: const Text('Join'),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => _declineNotification(
-                                  doc.id,
-                                  'Game invite declined',
-                                ),
-                                child: const Text('Decline'),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _declineNotification(
+                                doc.id,
+                                'Game invite declined',
                               ),
+                              child: const Text('Decline'),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 );
               }

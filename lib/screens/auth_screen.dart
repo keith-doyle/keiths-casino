@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../theme/app_theme.dart';
+
 class AuthScreen extends StatefulWidget {
   AuthScreen({super.key});
 
@@ -115,53 +117,154 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final title = _isLogin ? 'Welcome back' : 'Create account';
+    final subtitle = _isLogin
+        ? 'Sign in to continue to your card platform.'
+        : 'Create your account and start building your match history.';
+
     return Scaffold(
-      appBar: AppBar(title: Text(_isLogin ? 'Login' : 'Create account')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              if (!_isLogin)
-                TextFormField(
-                  controller: _usernameC,
-                  decoration: const InputDecoration(labelText: 'Username'),
-                  validator: (v) =>
-                  (v == null || v.trim().length < 3) ? 'Min 3 chars' : null,
-                ),
-              TextFormField(
-                controller: _emailC,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (v) =>
-                (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
-              ),
-              TextFormField(
-                controller: _passwordC,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
-                validator: (v) =>
-                (v == null || v.length < 6) ? 'Min 6 chars' : null,
-              ),
-              const SizedBox(height: 16),
-              if (_error != null)
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                child: Text(_isLogin ? 'Login' : 'Register'),
-              ),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () => setState(() => _isLogin = !_isLogin),
-                child: Text(
-                  _isLogin
-                      ? 'Need an account? Register'
-                      : 'Have an account? Login',
-                ),
-              ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFFF6F7FB),
+              Color(0xFFEFF1FA),
             ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 66,
+                      width: 66,
+                      decoration: AppTheme.gradientHeroDecoration,
+                      child: const Icon(
+                        Icons.style_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Card Games Compendium',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: AppTheme.softCardDecoration,
+                      padding: const EdgeInsets.all(22),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 18),
+                            if (!_isLogin) ...[
+                              TextFormField(
+                                controller: _usernameC,
+                                decoration: const InputDecoration(
+                                  labelText: 'Username',
+                                  prefixIcon: Icon(Icons.alternate_email),
+                                ),
+                                validator: (v) =>
+                                (v == null || v.trim().length < 3)
+                                    ? 'Min 3 chars'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            TextFormField(
+                              controller: _emailC,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: Icon(Icons.mail_outline_rounded),
+                              ),
+                              validator: (v) => (v == null || !v.contains('@'))
+                                  ? 'Enter a valid email'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _passwordC,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline_rounded),
+                              ),
+                              validator: (v) => (v == null || v.length < 6)
+                                  ? 'Min 6 chars'
+                                  : null,
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 14),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Colors.red.withOpacity(0.18),
+                                  ),
+                                ),
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            FilledButton(
+                              onPressed: _busy ? null : _submit,
+                              child: Text(
+                                _busy
+                                    ? 'Please wait...'
+                                    : (_isLogin ? 'Login' : 'Register'),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Center(
+                              child: TextButton(
+                                onPressed: _busy
+                                    ? null
+                                    : () => setState(() => _isLogin = !_isLogin),
+                                child: Text(
+                                  _isLogin
+                                      ? 'Need an account? Register'
+                                      : 'Have an account? Login',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

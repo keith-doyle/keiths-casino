@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/empty_state_widget.dart';
+import '../widgets/section_card.dart';
+
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
 
@@ -31,7 +34,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       final friendIds = List<String>.from(userDoc.data()?['friends'] ?? []);
 
-      List<Map<String, dynamic>> loaded = [];
+      final loaded = <Map<String, dynamic>>[];
 
       for (final fid in friendIds) {
         final doc = await _firestore.collection('users').doc(fid).get();
@@ -109,11 +112,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
       _controller.clear();
       _show("Friend request sent!");
     } on FirebaseException catch (e) {
-      debugPrint(
-          'FirebaseException send friend request: ${e.code} ${e.message}');
       _show("Error sending request: ${e.message ?? e.code}");
-    } catch (e) {
-      debugPrint('Generic send friend request error: $e');
+    } catch (_) {
       _show("Error sending request");
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -158,57 +158,87 @@ class _FriendsScreenState extends State<FriendsScreen> {
       appBar: AppBar(
         title: const Text("Friends"),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          SectionCard(
+            title: 'Add a Friend',
+            child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
                     textCapitalization: TextCapitalization.none,
                     decoration: const InputDecoration(
-                      labelText: "Add friend by username",
-                      border: OutlineInputBorder(),
+                      hintText: "Search by username",
+                      prefixIcon: Icon(Icons.search_rounded),
                     ),
                     onSubmitted: (_) => _loading ? null : _sendFriendRequest(),
                   ),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton(
+                const SizedBox(width: 12),
+                FilledButton(
                   onPressed: _loading ? null : _sendFriendRequest,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(90, 54),
+                  ),
                   child: Text(_loading ? "..." : "Add"),
-                )
+                ),
               ],
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: _friends.isEmpty
-                  ? const Center(
-                child: Text("No friends added yet."),
-              )
-                  : ListView.builder(
-                itemCount: _friends.length,
-                itemBuilder: (context, i) {
-                  final f = _friends[i];
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Your Friends',
+            child: _friends.isEmpty
+                ? const EmptyStateWidget(
+              icon: Icons.people_outline_rounded,
+              title: 'No friends added yet',
+              subtitle: 'Send a friend request to start building your network.',
+            )
+                : ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _friends.length,
+              separatorBuilder: (_, __) => const Divider(height: 20),
+              itemBuilder: (context, i) {
+                final f = _friends[i];
 
-                  return Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.person),
-                      title: Text(f['username']),
-                      trailing: IconButton(
-                        icon:
-                        const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _removeFriend(f['uid']),
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withOpacity(0.12),
+                    child: Text(
+                      f['username']
+                          .toString()
+                          .substring(0, 1)
+                          .toUpperCase(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                  );
-                },
-              ),
-            )
-          ],
-        ),
+                  ),
+                  title: Text(
+                    f['username'],
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Friend'),
+                  trailing: IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.red,
+                    ),
+                    onPressed: () => _removeFriend(f['uid']),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
