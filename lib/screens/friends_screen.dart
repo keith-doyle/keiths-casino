@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'package:fyp_app/screens/friends_profile_screen.dart';
 import '../widgets/empty_state_widget.dart';
 import '../widgets/section_card.dart';
 
@@ -188,56 +188,85 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          SectionCard(
-            title: 'Your Friends',
-            child: _friends.isEmpty
-                ? const EmptyStateWidget(
-              icon: Icons.people_outline_rounded,
-              title: 'No friends added yet',
-              subtitle: 'Send a friend request to start building your network.',
-            )
-                : ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _friends.length,
-              separatorBuilder: (_, __) => const Divider(height: 20),
-              itemBuilder: (context, i) {
-                final f = _friends[i];
+      SectionCard(
+        title: 'Your Friends',
+        child: _friends.isEmpty
+            ? const EmptyStateWidget(
+          icon: Icons.people_outline_rounded,
+          title: 'No friends added yet',
+          subtitle:
+          'Send a friend request to start building your network.',
+        )
+            : ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _friends.length,
+          separatorBuilder: (_, __) => const Divider(height: 20),
+          itemBuilder: (context, i) {
+            final f = _friends[i];
 
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.12),
-                    child: Text(
-                      f['username']
-                          .toString()
-                          .substring(0, 1)
-                          .toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => FriendProfileScreen(
+                      friendUid: f['uid'],
+                      friendUsername: f['username'],
                     ),
                   ),
-                  title: Text(
-                    f['username'],
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                );
+              },
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withOpacity(0.12),
+                child: Text(
+                  f['username']
+                      .toString()
+                      .substring(0, 1)
+                      .toUpperCase(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                  subtitle: const Text('Friend'),
-                  trailing: IconButton(
+                ),
+              ),
+              title: Text(
+                f['username'],
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text('Friend'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.person_outline_rounded),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => FriendProfileScreen(
+                            friendUid: f['uid'],
+                            friendUsername: f['username'],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
                     icon: const Icon(
                       Icons.delete_outline_rounded,
                       color: Colors.red,
                     ),
                     onPressed: () => _removeFriend(f['uid']),
                   ),
-                );
-              },
-            ),
-          ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
         ],
       ),
     );
