@@ -9,6 +9,7 @@ import '../widgets/empty_state_widget.dart';
 import '../widgets/section_card.dart';
 import 'blackjack_lobby_screen.dart';
 import 'poker_lobby_screen.dart';
+import 'chat_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -153,6 +154,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> _openChatNotification(
+      String notificationId,
+      String fromUid,
+      String fromUsername,
+      ) async {
+    try {
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('notifications')
+          .doc(notificationId)
+          .update({'status': 'accepted'});
+
+      if (!mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            friendUid: fromUid,
+            friendUsername: fromUsername,
+          ),
+        ),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to open chat: ${e.message ?? e.code}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final notificationsQuery = _firestore
@@ -200,7 +232,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return const EmptyStateWidget(
               icon: Icons.notifications_none_rounded,
               title: 'No pending notifications',
-              subtitle: 'Friend requests and game invites will appear here.',
+              subtitle: 'Friend requests, chat messages, and game invites will appear here.',
             );
           }
 
@@ -302,6 +334,64 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 'Game invite declined',
                               ),
                               child: const Text('Decline'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (type == 'chat_message') {
+                final fromUsername =
+                (data['fromUsername'] ?? 'Unknown').toString();
+                final fromUid = (data['fromUid'] ?? '').toString();
+                final messageText = (data['messageText'] ?? '').toString();
+
+                return SectionCard(
+                  title: 'New Message',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$fromUsername sent you a message.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          messageText.isEmpty ? '(No preview available)' : messageText,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () => _openChatNotification(
+                                doc.id,
+                                fromUid,
+                                fromUsername,
+                              ),
+                              child: const Text('Open Chat'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _declineNotification(
+                                doc.id,
+                                'Message notification dismissed',
+                              ),
+                              child: const Text('Dismiss'),
                             ),
                           ),
                         ],
