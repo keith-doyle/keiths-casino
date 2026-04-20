@@ -273,8 +273,10 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     final myBet = ((_myPlayer?["bet"] ?? 0) as num).toInt();
     final myTotal = (((_myPlayer?["total"] ?? 0) as num).toInt());
     final dealerTotal = _dealerTotal ?? 0;
-    final opponentCount =
+
+    final rawOpponentCount =
         _players.where((p) => p["id"] != widget.playerId).length;
+    final opponentCount = rawOpponentCount < 1 ? 1 : rawOpponentCount;
 
     final coinDelta = resultStr == 'Win'
         ? myBet

@@ -233,6 +233,10 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final finalChips = _myChips;
     final coinDelta = finalChips - _coins;
 
+    final rawOpponentCount =
+        _players.where((p) => p["id"] != widget.playerId).length;
+    final opponentCount = rawOpponentCount < 1 ? 1 : rawOpponentCount;
+
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final matchesRef = userRef.collection('matches');
     final statsRef = userRef.collection('stats').doc('poker');
@@ -303,7 +307,6 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         highestPotSeen = _pot;
       }
 
-      // Use backend final chips as source of truth
       final newCoins = finalChips < 0 ? 0 : finalChips;
 
       final matchDoc = matchesRef.doc();
@@ -317,7 +320,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         'finalChips': finalChips,
         'potAtEnd': _pot,
         'roomId': widget.roomId,
-        'opponentCount': _players.where((p) => p["id"] != widget.playerId).length,
+        'opponentCount': opponentCount,
         'winningHandName': _winningHandName,
         'phaseEnded': _phase,
         'playedAt': FieldValue.serverTimestamp(),
