@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import '../widgets/empty_state_widget.dart';
 import '../widgets/section_card.dart';
@@ -94,14 +94,11 @@ class MatchesScreen extends StatelessWidget {
               final gameType = (data['gameType'] ?? 'Unknown').toString();
               final result = (data['result'] ?? '-').toString();
               final mode = (data['mode'] ?? '').toString();
-
-              final bet = ((data['bet'] ?? 0) as num).toInt();
               final coinDelta = ((data['coinDelta'] ?? 0) as num).toInt();
-              final playerTotal = ((data['playerTotal'] ?? 0) as num).toInt();
-              final dealerTotal = ((data['dealerTotal'] ?? 0) as num).toInt();
               final roomId = (data['roomId'] ?? '').toString();
-              final opponentCount =
-              ((data['opponentCount'] ?? 0) as num).toInt();
+              final opponentCount = ((data['opponentCount'] ?? 0) as num).toInt();
+
+              final isPoker = gameType.toLowerCase().contains('poker');
 
               return SectionCard(
                 title: gameType,
@@ -139,13 +136,24 @@ class MatchesScreen extends StatelessWidget {
                       runSpacing: 8,
                       children: [
                         _metaChip('Mode: ${_modeLabel(mode)}'),
-                        _metaChip('Bet: $bet'),
-                        _metaChip('You: $playerTotal'),
-                        _metaChip('Dealer: $dealerTotal'),
                         if (mode == 'multiplayer')
-                          _metaChip('Opponents: $opponentCount'),
+                          _metaChip('Opponents: ${opponentCount < 1 ? 1 : opponentCount}'),
                         if (mode == 'multiplayer' && roomId.isNotEmpty)
                           _metaChip('Room: $roomId'),
+
+                        if (!isPoker) ...[
+                          _metaChip('Bet: ${((data['bet'] ?? 0) as num).toInt()}'),
+                          _metaChip('You: ${((data['playerTotal'] ?? 0) as num).toInt()}'),
+                          _metaChip('Dealer: ${((data['dealerTotal'] ?? 0) as num).toInt()}'),
+                        ] else ...[
+                          _metaChip('Start: ${((data['startingCoins'] ?? 0) as num).toInt()}'),
+                          _metaChip('End: ${((data['endingCoins'] ?? 0) as num).toInt()}'),
+                          _metaChip('Pot: ${((data['potAtEnd'] ?? 0) as num).toInt()}'),
+                          if ((data['winningHandName'] ?? '').toString().isNotEmpty)
+                            _metaChip('Hand: ${(data['winningHandName']).toString()}'),
+                          if ((data['phaseEnded'] ?? '').toString().isNotEmpty)
+                            _metaChip('Ended: ${(data['phaseEnded']).toString()}'),
+                        ],
                       ],
                     ),
                   ],
