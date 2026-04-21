@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fyp_app/screens/singleplayer_poker_screen.dart';
 
 import '../widgets/primary_action_tile.dart';
 import '../widgets/section_card.dart';
@@ -13,6 +14,7 @@ import 'blackjack_screen.dart';
 import 'friends_screen.dart';
 import 'notifications_screen.dart';
 import 'poker_room_screen.dart';
+import 'tutorial_poker_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
@@ -120,7 +122,7 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Choose a mode, jump into a room, or review your progress.',
+                'Choose a multiplayer table, a solo mode, or a guided tutorial.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 20),
@@ -148,7 +150,7 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               Text(
-                'Play',
+                'Blackjack',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
@@ -169,7 +171,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.casino_outlined,
                 title: 'Singleplayer Blackjack',
-                subtitle: 'Play a solo hand and build your stats.',
+                subtitle: 'Play solo and build your stats.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -180,13 +182,60 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               PrimaryActionTile(
-                icon: Icons.table_bar_rounded,
+                icon: Icons.school_outlined,
+                title: 'Tutorial Blackjack',
+                subtitle: 'Play while learning hit, stand, totals, and dealer logic.',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BlackjackScreen(
+                        tutorialMode: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 22),
+              Text(
+                'Poker',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              PrimaryActionTile(
+                icon: Icons.groups_rounded,
                 title: 'Multiplayer Poker',
-                subtitle: 'Join a live Texas Hold’em room with real-time updates.',
+                subtitle: 'Join a live poker room with friends.',
+                primary: true,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const PokerRoomScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              PrimaryActionTile(
+                icon: Icons.person_outline_rounded,
+                title: 'Singleplayer Poker',
+                subtitle: 'Play a simplified solo poker experience against table opponents.',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SingleplayerPokerScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              PrimaryActionTile(
+                icon: Icons.menu_book_rounded,
+                title: 'Tutorial Poker',
+                subtitle: 'Learn phases, actions, hand rankings, and table flow while playing.',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const TutorialPokerScreen(),
                     ),
                   );
                 },

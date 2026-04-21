@@ -9,7 +9,12 @@ import '../services/blackjack_ws_service.dart';
 import '../widgets/playing_card_widget.dart';
 
 class BlackjackScreen extends StatefulWidget {
-  const BlackjackScreen({super.key});
+  final bool tutorialMode;
+
+  const BlackjackScreen({
+    super.key,
+    this.tutorialMode = false,
+  });
 
   @override
   State<BlackjackScreen> createState() => _BlackjackScreenState();
@@ -47,6 +52,14 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   }
 
   Future<void> _loadCoins() async {
+    if (widget.tutorialMode) {
+      if (!mounted) return;
+      setState(() {
+        _coins = 1000;
+      });
+      return;
+    }
+
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -61,6 +74,20 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         _coins = ((data?['coins'] ?? 0) as num).toInt();
       });
     } catch (_) {}
+  }
+
+  void _applyTutorialResult(String resultStr) {
+    final bet = _selectedBet;
+    final coinDelta = resultStr == 'Win'
+        ? bet
+        : resultStr == 'Loss'
+        ? -bet
+        : 0;
+
+    setState(() {
+      _coins += coinDelta;
+      if (_coins < 0) _coins = 0;
+    });
   }
 
   void _connectAndListen() {
@@ -110,25 +137,27 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
           setState(() {
             _gameId = msg["game_id"] as String?;
-
             _playerCards = List<String>.from((msg["player_cards"] ?? []) as List);
             _dealerCards = List<String>.from((msg["dealer_cards"] ?? []) as List);
-
             _playerTotal = (msg["player_total"] ?? 0) as int;
             _dealerTotal = (msg["dealer_total"] ?? 0) as int;
-
             _status = (msg["status"] ?? "").toString();
             _gameOver = (msg["game_over"] ?? false) as bool;
             _dealerRevealed = (msg["dealer_revealed"] ?? false) as bool;
             _resultStr = msg["result"]?.toString();
-
             _busy = false;
           });
 
           if (_gameOver && _betLockedForHand && !_savedThisHand) {
             _savedThisHand = true;
             try {
-              await _saveMatchStatsAndCoins(_resultStr);
+              if (widget.tutorialMode) {
+                if (_resultStr != null) {
+                  _applyTutorialResult(_resultStr!);
+                }
+              } else {
+                await _saveMatchStatsAndCoins(_resultStr);
+              }
             } catch (e) {
               if (!mounted) return;
               setState(() {
@@ -198,7 +227,13 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     if (_gameOver && !_savedThisHand) {
       _savedThisHand = true;
       try {
-        await _saveMatchStatsAndCoins(_resultStr);
+        if (widget.tutorialMode) {
+          if (_resultStr != null) {
+            _applyTutorialResult(_resultStr!);
+          }
+        } else {
+          await _saveMatchStatsAndCoins(_resultStr);
+        }
       } catch (e) {
         if (!mounted) return;
         setState(() {
@@ -256,7 +291,6 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       int bestWinStreak = 0;
 
       int coins = 0;
-
       bool legacyStats = false;
 
       if (statsSnap.exists) {
@@ -278,13 +312,11 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
               ((existing['singleplayerWins'] ?? 0) as num).toInt();
           multiplayerWins =
               ((existing['multiplayerWins'] ?? 0) as num).toInt();
-
           coinsWon = ((existing['coinsWon'] ?? 0) as num).toInt();
           coinsLost = ((existing['coinsLost'] ?? 0) as num).toInt();
           netCoins = ((existing['netCoins'] ?? 0) as num).toInt();
           highestBet = ((existing['highestBet'] ?? 0) as num).toInt();
           biggestWin = ((existing['biggestWin'] ?? 0) as num).toInt();
-
           currentWinStreak =
               ((existing['currentWinStreak'] ?? 0) as num).toInt();
           bestWinStreak =
@@ -335,7 +367,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
-        'gameType': 'Blackjack',
+        'gameType': widget.tutorialMode ? 'Blackjack Tutorial' : 'Blackjack',
         'mode': 'singleplayer',
         'result': resultStr,
         'bet': bet,
@@ -378,6 +410,88 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         });
       }
     });
+  }
+
+  int? _dealerUpCardValue() {
+    if (_dealerCards.isEmpty) return null;
+    final id = _dealerCards.first.toUpperCase();
+    if (id.length < 2) return null;
+
+    final rank = id.substring(0, id.length - 1);
+
+    switch (rank) {
+      case 'A':
+        return 11;
+      case 'K':
+      case 'Q':
+      case 'J':
+      case '10':
+        return 10;
+      default:
+        return int.tryParse(rank);
+    }
+  }
+
+  String _tutorialHeading() {
+    if (_gameId == null) return 'How tutorial mode works';
+    if (_gameOver) return 'Hand review';
+    if (!_betLockedForHand) return 'Step 1: lock in your bet';
+    return 'Live decision hint';
+  }
+
+  String _tutorialBody() {
+    if (_gameId == null) {
+      return 'Deal a hand first. Once your cards appear, choose a bet, confirm it, and then decide whether to hit or stand.';
+    }
+
+    if (!_betLockedForHand) {
+      return 'Choose your bet now. After confirming, you will play the hand and the tutorial will explain your decision points.';
+    }
+
+    if (_gameOver) {
+      if (_resultStr == 'Win') {
+        return 'You won the hand. Compare your final total against the dealer total and note how avoiding a bust helped you finish ahead.';
+      }
+      if (_resultStr == 'Loss') {
+        return 'You lost the hand. Check whether you busted or whether the dealer finished with a stronger total.';
+      }
+      return 'A push means the hand tied. Neither side won or lost the bet.';
+    }
+
+    final dealerUp = _dealerUpCardValue();
+    final total = _playerTotal;
+
+    if (total <= 11) {
+      return 'Your total is $total. Hitting is very safe because one extra card cannot bust you.';
+    }
+
+    if (total >= 17) {
+      return 'Your total is $total. Standing is usually the safer choice because another card often risks a bust.';
+    }
+
+    if (total >= 12 && total <= 16) {
+      if (dealerUp != null && dealerUp >= 7) {
+        return 'You have $total and the dealer shows $dealerUp. The dealer is showing strength, so hitting is often the better choice.';
+      }
+      if (dealerUp != null && dealerUp <= 6) {
+        return 'You have $total and the dealer shows $dealerUp. The dealer is weaker here, so standing is often more reasonable.';
+      }
+    }
+
+    return 'Compare your total with the dealer’s visible up-card. Strong totals tend to stand. Weak or medium totals often need another card.';
+  }
+
+  String _tutorialTip() {
+    if (_gameId == null) {
+      return 'Rule reminder: go over 21 and you bust immediately.';
+    }
+    if (_gameOver) {
+      return 'Rule reminder: after your turn ends, the dealer reveals the hidden card and completes the hand.';
+    }
+    if (!_betLockedForHand) {
+      return 'Rule reminder: face cards count as 10. Aces can count as 1 or 11.';
+    }
+    return 'Rule reminder: blackjack decisions are about card totals and dealer pressure, not just guessing.';
   }
 
   Color _resultColor(String? result) {
@@ -464,9 +578,9 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: Colors.white24),
       ),
-      child: const Text(
-        'Singleplayer',
-        style: TextStyle(
+      child: Text(
+        widget.tutorialMode ? 'Tutorial Blackjack' : 'Singleplayer Blackjack',
+        style: const TextStyle(
           color: Colors.white70,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.4,
@@ -578,9 +692,13 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                 ),
               ),
               _badge(
-                'SOLO',
-                fg: Colors.blue.shade100,
-                bg: Colors.blue.withOpacity(0.25),
+                widget.tutorialMode ? 'TUTORIAL' : 'SOLO',
+                fg: widget.tutorialMode
+                    ? Colors.amber.shade100
+                    : Colors.blue.shade100,
+                bg: widget.tutorialMode
+                    ? Colors.amber.withOpacity(0.25)
+                    : Colors.blue.withOpacity(0.25),
               ),
             ],
           ),
@@ -591,7 +709,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             runSpacing: 4,
             children: [
               Text(
-                'Coins: $_coins',
+                widget.tutorialMode ? 'Practice Coins: $_coins' : 'Coins: $_coins',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -623,6 +741,51 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             bet: _selectedBet,
             total: _playerTotal,
             result: _resultStr,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTutorialCard() {
+    if (!widget.tutorialMode) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amber.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _tutorialHeading(),
+            style: const TextStyle(
+              color: Colors.amber,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _tutorialBody(),
+            style: const TextStyle(
+              color: Colors.white,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _tutorialTip(),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -795,7 +958,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Blackjack'),
+        title: Text(widget.tutorialMode ? 'Blackjack Tutorial' : 'Blackjack'),
         centerTitle: true,
       ),
       body: Container(
@@ -818,6 +981,10 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
               children: [
                 Center(child: _buildModePill()),
                 const SizedBox(height: 14),
+                if (widget.tutorialMode) ...[
+                  _buildTutorialCard(),
+                  const SizedBox(height: 14),
+                ],
                 _buildDealerSeat(),
                 const SizedBox(height: 16),
                 _buildMySeat(),
@@ -841,10 +1008,12 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.white24),
                     ),
-                    child: const Text(
-                      'Deal first to see your cards.\nThen choose and confirm your bet before playing.',
+                    child: Text(
+                      widget.tutorialMode
+                          ? 'Tutorial flow:\n1. Deal cards\n2. Choose a bet\n3. Confirm it\n4. Read the hint\n5. Decide whether to hit or stand'
+                          : 'Deal first to see your cards.\nThen choose and confirm your bet before playing.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
                       ),
