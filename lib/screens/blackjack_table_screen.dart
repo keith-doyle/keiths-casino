@@ -116,6 +116,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         }
 
         if (type == "table_state") {
+          final previousGameOver = _gameOver;
           final players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
 
           if (!mounted) return;
@@ -134,14 +135,24 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
             _dealerRevealed = (msg["dealer_revealed"] ?? false) as bool;
             _bettingOpen = (msg["betting_open"] ?? false) as bool;
 
+            final myBetFromState = players
+                .where((p) => p["id"] == widget.playerId)
+                .map((p) => ((p["bet"] ?? 0) as num).toInt())
+                .cast<int?>()
+                .firstWhere((_) => true, orElse: () => null);
+
+            if (myBetFromState != null && myBetFromState > 0) {
+              _selectedBet = myBetFromState;
+            }
+
             _busy = false;
           });
 
-          if (!_gameStarted || _gameOver) {
+          if (!_gameOver) {
             _savedThisRound = false;
           }
 
-          if (_gameOver && !_savedThisRound) {
+          if (!previousGameOver && _gameOver && !_savedThisRound) {
             final me = _myPlayer;
             final result = me?["result"]?.toString();
 
@@ -204,10 +215,13 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
   bool get _canStartRound =>
       !_busy && !_gameStarted && _players.length >= 2 && _isHost;
+
   bool get _canRestartRound =>
       !_busy && _gameOver && _players.length >= 2 && _isHost;
+
   bool get _canBet =>
       !_busy && _gameStarted && !_gameOver && _bettingOpen && !_joinedMidRound;
+
   bool get _canPlay =>
       _gameStarted && !_gameOver && !_bettingOpen && !_busy && _isMyTurn;
 
@@ -247,6 +261,33 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     return 0;
   }
 
+  String _heroText() {
+    if (!_gameStarted) {
+      if (_players.length < 2) return 'Waiting for more players';
+      return _isHost ? 'You can start the round' : 'Waiting for host to start';
+    }
+
+    if (_gameOver) {
+      final result = _myPlayer?["result"]?.toString() ?? '-';
+      return 'Round complete • $result';
+    }
+
+    if (_bettingOpen) {
+      if (_joinedMidRound) return 'You joined mid-round';
+      if (_myBet > 0) {
+        if (_playersStillToBet > 0) {
+          return 'Bet locked • waiting for $_playersStillToBet player(s)';
+        }
+        return 'Bet locked';
+      }
+      return 'Place your bet';
+    }
+
+    if (_isMyTurn) return 'Your turn';
+    if (_turnPlayerId == null) return 'Dealer resolving';
+    return 'Waiting for $_turnPlayerName';
+  }
+
   void _sendBet(int amount) {
     if (amount > _coins) {
       setState(() {
@@ -258,6 +299,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     setState(() {
       _selectedBet = amount;
       _busy = true;
+      _status = 'Sending bet of $amount...';
     });
 
     _ws.sendJson({
@@ -271,7 +313,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     if (uid == null) throw Exception("Not signed in");
 
     final myBet = ((_myPlayer?["bet"] ?? 0) as num).toInt();
-    final myTotal = (((_myPlayer?["total"] ?? 0) as num).toInt());
+    final myTotal = ((_myPlayer?["total"] ?? 0) as num).toInt();
     final dealerTotal = _dealerTotal ?? 0;
 
     final rawOpponentCount =
@@ -312,7 +354,6 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       int bestWinStreak = 0;
 
       int coins = 0;
-
       bool legacyStats = false;
 
       if (statsSnap.exists) {
@@ -492,31 +533,23 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     }
   }
 
-  String _compactStatusText() {
-    if (!_gameStarted) {
-      if (_players.length < 2) return 'Need 2 players to start';
-      return _isHost ? 'You are host. Start when ready.' : 'Waiting for host';
-    }
-
-    if (_gameOver) {
-      final result = _myPlayer?["result"]?.toString() ?? '-';
-      return 'Round complete • Result: $result';
-    }
-
-    if (_bettingOpen) {
-      if (_joinedMidRound) return 'You joined mid-round';
-      if (_myBet > 0) {
-        if (_playersStillToBet > 0) {
-          return 'Bet locked • Waiting for $_playersStillToBet player(s)';
-        }
-        return 'Bet locked';
-      }
-      return 'Place your bet';
-    }
-
-    if (_isMyTurn) return 'Your turn';
-    if (_turnPlayerId == null) return 'Dealer resolving';
-    return 'Waiting for $_turnPlayerName';
+  Widget _pill(String text, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: (color ?? Colors.black).withOpacity(0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color ?? Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
   }
 
   Widget _badge(
@@ -582,62 +615,49 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
-  Widget _buildRoomPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Text(
-        'Room ${widget.roomId}',
-        style: const TextStyle(
-          color: Colors.white70,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopInfoBar() {
+  Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.16),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: Colors.white24),
       ),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 12,
-        runSpacing: 4,
+      child: Column(
         children: [
-          Text(
-            'Players: ${_players.length}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _pill('MULTIPLAYER BLACKJACK'),
+              _pill('Room ${widget.roomId}'),
+              _pill('Coins $_coins'),
+              _pill('Players ${_players.length}'),
+            ],
           ),
+          const SizedBox(height: 12),
           Text(
-            _isHost ? 'Host: You' : 'Host: $_hostName',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            _compactStatusText(),
+            _heroText(),
+            textAlign: TextAlign.center,
             style: TextStyle(
-              color: _isMyTurn
-                  ? Colors.green.shade300
-                  : _gameOver
-                  ? Colors.orange.shade300
-                  : Colors.white70,
-              fontWeight: FontWeight.w700,
+              color: _gameOver
+                  ? _resultColor(_myPlayer?["result"]?.toString())
+                  : (_isMyTurn ? Colors.green.shade300 : Colors.white),
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _isHost
+                ? 'You are hosting this table.'
+                : 'Host: $_hostName',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -649,37 +669,46 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     final dealerTotalText =
     _dealerRevealed ? (_dealerTotal?.toString() ?? '-') : '??';
 
-    return Column(
-      children: [
-        const Text(
-          'Dealer',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Dealer',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: _buildFanHand(
-            _dealerCards,
-            cardWidth: 64,
-            cardHeight: 96,
-            overlap: 38,
-            hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _buildFanHand(
+              _dealerCards,
+              cardWidth: 64,
+              cardHeight: 96,
+              overlap: 38,
+              hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Dealer total: $dealerTotalText',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+          const SizedBox(height: 8),
+          Text(
+            'Dealer total: $dealerTotalText',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -732,10 +761,10 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     final bet = ((player["bet"] ?? 0) as num).toInt();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: isTurn ? Colors.white.withOpacity(0.06) : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        color: isTurn ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isTurn ? Colors.green.shade300 : Colors.white12,
           width: isTurn ? 1.4 : 1,
@@ -752,7 +781,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -775,7 +804,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
               ],
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Center(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -787,7 +816,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             _seatStateText(player),
             textAlign: TextAlign.center,
@@ -828,7 +857,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     if (opponents.length == 1) {
       return Center(
         child: SizedBox(
-          width: 190,
+          width: 210,
           child: _buildOpponentSeat(opponents[0]),
         ),
       );
@@ -855,7 +884,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.10),
+        color: Colors.black.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _isMyTurn ? Colors.green.shade300 : Colors.white24,
@@ -872,7 +901,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -947,27 +976,6 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
-  Widget _buildStatusBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.18),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Text(
-        _status,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-
   Widget _buildBetSelector() {
     Widget chip(int amount) {
       final selected = _selectedBet == amount;
@@ -991,10 +999,12 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
     String helperText;
     if (_joinedMidRound) {
-      helperText = 'You joined after this round started and will play next round.';
+      helperText =
+      'You joined after this round started and will play next round.';
     } else if (_myBet > 0) {
       if (_playersStillToBet > 0) {
-        helperText = 'Your bet: $_myBet • Waiting for $_playersStillToBet player(s)';
+        helperText =
+        'Your bet: $_myBet • Waiting for $_playersStillToBet player(s)';
       } else {
         helperText = 'Your bet: $_myBet • Waiting for round to begin';
       }
@@ -1004,10 +1014,10 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white24),
       ),
       child: Column(
@@ -1078,10 +1088,10 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _resultColor(result).withOpacity(0.8),
         ),
@@ -1104,7 +1114,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 12,
@@ -1138,12 +1148,33 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     );
   }
 
+  Widget _buildStatusBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        _status,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
   Widget _buildControls() {
     ButtonStyle style(Color bg) {
       return FilledButton.styleFrom(
         backgroundColor: bg,
         foregroundColor: Colors.white,
-        minimumSize: const Size(0, 50),
+        minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
         ),
@@ -1205,18 +1236,20 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     return Row(
       children: [
         Expanded(
-          child: FilledButton(
+          child: FilledButton.icon(
             style: style(const Color(0xFFEF4444)),
             onPressed: _canPlay ? () => _ws.sendAction("hit") : null,
-            child: const Text('Hit'),
+            icon: const Icon(Icons.add),
+            label: const Text('Hit'),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: FilledButton(
+          child: FilledButton.icon(
             style: style(const Color(0xFF2563EB)),
             onPressed: _canPlay ? () => _ws.sendAction("stand") : null,
-            child: const Text('Stand'),
+            icon: const Icon(Icons.pan_tool_alt_outlined),
+            label: const Text('Stand'),
           ),
         ),
       ],
@@ -1257,9 +1290,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(child: _buildRoomPill()),
-                const SizedBox(height: 10),
-                _buildTopInfoBar(),
+                _buildHeaderCard(),
                 const SizedBox(height: 12),
                 _buildDealerSeat(),
                 const SizedBox(height: 14),
@@ -1291,11 +1322,12 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
                       border: Border.all(color: Colors.white24),
                     ),
                     child: const Text(
-                      'Cards are dealt before bets are placed.',
+                      'Round flow:\n1. Host starts the round\n2. Cards are dealt\n3. Players place bets\n4. Turns are played\n5. Results save automatically',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
+                        height: 1.35,
                       ),
                     ),
                   ),

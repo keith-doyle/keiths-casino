@@ -84,6 +84,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         ? -bet
         : 0;
 
+    if (!mounted) return;
     setState(() {
       _coins += coinDelta;
       if (_coins < 0) _coins = 0;
@@ -137,8 +138,10 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
           setState(() {
             _gameId = msg["game_id"] as String?;
-            _playerCards = List<String>.from((msg["player_cards"] ?? []) as List);
-            _dealerCards = List<String>.from((msg["dealer_cards"] ?? []) as List);
+            _playerCards =
+            List<String>.from((msg["player_cards"] ?? []) as List);
+            _dealerCards =
+            List<String>.from((msg["dealer_cards"] ?? []) as List);
             _playerTotal = (msg["player_total"] ?? 0) as int;
             _dealerTotal = (msg["dealer_total"] ?? 0) as int;
             _status = (msg["status"] ?? "").toString();
@@ -193,6 +196,8 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   }
 
   void _sendAction(String action) {
+    if (!mounted) return;
+
     setState(() => _busy = true);
 
     if (action == "deal") {
@@ -200,6 +205,15 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       _gameId = null;
       _betLockedForHand = false;
       _resultStr = null;
+      _gameOver = false;
+      _dealerRevealed = false;
+      _playerCards = [];
+      _dealerCards = [];
+      _playerTotal = 0;
+      _dealerTotal = 0;
+      _status = widget.tutorialMode
+          ? 'Dealing a new tutorial hand...'
+          : 'Dealing a new hand...';
     }
 
     _ws.sendJson({
@@ -219,9 +233,11 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
     setState(() {
       _betLockedForHand = true;
-      _status = _gameOver
+      _status = widget.tutorialMode
+          ? "Practice bet locked. Play your hand."
+          : (_gameOver
           ? "Bet locked. Saving result..."
-          : "Bet locked. Play your hand.";
+          : "Bet locked. Play your hand.");
     });
 
     if (_gameOver && !_savedThisHand) {
@@ -367,7 +383,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
       final matchDoc = matchesRef.doc();
       tx.set(matchDoc, {
-        'gameType': widget.tutorialMode ? 'Blackjack Tutorial' : 'Blackjack',
+        'gameType': 'Blackjack',
         'mode': 'singleplayer',
         'result': resultStr,
         'bet': bet,
@@ -435,17 +451,17 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   String _tutorialHeading() {
     if (_gameId == null) return 'How tutorial mode works';
     if (_gameOver) return 'Hand review';
-    if (!_betLockedForHand) return 'Step 1: lock in your bet';
+    if (!_betLockedForHand) return 'Step 1: lock in your practice bet';
     return 'Live decision hint';
   }
 
   String _tutorialBody() {
     if (_gameId == null) {
-      return 'Deal a hand first. Once your cards appear, choose a bet, confirm it, and then decide whether to hit or stand.';
+      return 'Deal a hand first. Once your cards appear, choose a practice bet, confirm it, and then decide whether to hit or stand.';
     }
 
     if (!_betLockedForHand) {
-      return 'Choose your bet now. After confirming, you will play the hand and the tutorial will explain your decision points.';
+      return 'Choose your practice bet now. After confirming, you will play the hand and the tutorial will explain your decision points.';
     }
 
     if (_gameOver) {
@@ -505,6 +521,48 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       default:
         return Colors.white;
     }
+  }
+
+  String _heroStatusText() {
+    if (_gameId == null) {
+      return widget.tutorialMode
+          ? 'Deal a tutorial hand to begin'
+          : 'Deal a hand to begin';
+    }
+
+    if (_gameOver) {
+      if (_resultStr == 'Win') return 'You won this hand';
+      if (_resultStr == 'Loss') return 'Dealer won this hand';
+      if (_resultStr == 'Push') return 'Hand ended in a push';
+      return 'Hand complete';
+    }
+
+    if (!_betLockedForHand) {
+      return widget.tutorialMode
+          ? 'Choose and confirm your practice bet'
+          : 'Choose and confirm your bet';
+    }
+
+    return 'Your move';
+  }
+
+  Widget _pill(String text, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: (color ?? Colors.black).withOpacity(0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color ?? Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
   }
 
   Widget _badge(
@@ -570,21 +628,55 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     );
   }
 
-  Widget _buildModePill() {
+  Widget _buildHeaderCard() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(999),
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: Colors.white24),
       ),
-      child: Text(
-        widget.tutorialMode ? 'Tutorial Blackjack' : 'Singleplayer Blackjack',
-        style: const TextStyle(
-          color: Colors.white70,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-        ),
+      child: Column(
+        children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _pill(
+                widget.tutorialMode ? 'TUTORIAL BLACKJACK' : 'SINGLEPLAYER BLACKJACK',
+                color: widget.tutorialMode
+                    ? Colors.amber.shade200
+                    : Colors.white,
+              ),
+              _pill('Bet ${_selectedBet}'),
+              _pill(widget.tutorialMode ? 'Practice Coins $_coins' : 'Coins $_coins'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _heroStatusText(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _gameOver ? _resultColor(_resultStr) : Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.tutorialMode
+                ? 'Tutorial hands use practice coins only and do not affect your saved profile stats.'
+                : 'Singleplayer hands save coins, match history, and blackjack stats automatically.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -592,37 +684,46 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   Widget _buildDealerSeat() {
     final dealerTotalText = _dealerRevealed ? _dealerTotal.toString() : '??';
 
-    return Column(
-      children: [
-        const Text(
-          'Dealer',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Dealer',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: _buildFanHand(
-            _dealerCards,
-            cardWidth: 64,
-            cardHeight: 96,
-            overlap: 38,
-            hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _buildFanHand(
+              _dealerCards,
+              cardWidth: 64,
+              cardHeight: 96,
+              overlap: 38,
+              hideDealerSecond: !_dealerRevealed && _dealerCards.length >= 2,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Dealer total: $dealerTotalText',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+          const SizedBox(height: 10),
+          Text(
+            'Dealer total: $dealerTotalText',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -669,11 +770,13 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.10),
+        color: Colors.black.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white24,
-          width: 1,
+          color: _betLockedForHand
+              ? Colors.green.withOpacity(0.45)
+              : Colors.white24,
+          width: 1.2,
         ),
       ),
       child: Column(
@@ -686,7 +789,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -709,7 +812,9 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             runSpacing: 4,
             children: [
               Text(
-                widget.tutorialMode ? 'Practice Coins: $_coins' : 'Coins: $_coins',
+                widget.tutorialMode
+                    ? 'Practice Coins: $_coins'
+                    : 'Coins: $_coins',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -755,7 +860,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.amber.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.amber.withOpacity(0.5)),
       ),
       child: Column(
@@ -792,6 +897,88 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     );
   }
 
+  Widget _buildBetSelector() {
+    Widget chip(int amount) {
+      final selected = _selectedBet == amount;
+
+      return ChoiceChip(
+        label: Text('$amount'),
+        selected: selected,
+        onSelected: _busy || _betLockedForHand
+            ? null
+            : (_) {
+          setState(() {
+            _selectedBet = amount;
+          });
+        },
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.tutorialMode
+                      ? 'Choose your practice bet'
+                      : 'Choose your bet',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                _betLockedForHand ? 'Locked' : 'Select',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              widget.tutorialMode
+                  ? 'This only affects practice coins in tutorial mode.'
+                  : 'This hand will use your saved balance and stats.',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              chip(10),
+              chip(25),
+              chip(50),
+              chip(100),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusBar() {
     return Container(
       width: double.infinity,
@@ -813,65 +1000,79 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     );
   }
 
-  Widget _buildBetSelector() {
-    Widget chip(int amount) {
-      final selected = _selectedBet == amount;
+  Widget _buildRoundSummary() {
+    if (!_gameOver) return const SizedBox.shrink();
 
-      return ChoiceChip(
-        label: Text('$amount'),
-        selected: selected,
-        onSelected: _busy || _betLockedForHand
-            ? null
-            : (_) {
-          setState(() {
-            _selectedBet = amount;
-          });
-        },
-      );
-    }
+    final result = _resultStr ?? '-';
+    final coinDelta = result == 'Win'
+        ? _selectedBet
+        : result == 'Loss'
+        ? -_selectedBet
+        : 0;
+
+    final coinText = coinDelta > 0
+        ? '+$coinDelta'
+        : coinDelta < 0
+        ? '$coinDelta'
+        : '0';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
+        color: Colors.black.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _resultColor(result).withOpacity(0.8),
+        ),
       ),
       child: Column(
         children: [
-          Row(
+          Text(
+            result.toUpperCase(),
+            style: TextStyle(
+              color: _resultColor(result),
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.tutorialMode
+                ? 'Practice result: $coinText'
+                : 'Coin change: $coinText',
+            style: TextStyle(
+              color: _resultColor(result),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 4,
             children: [
-              const Expanded(
-                child: Text(
-                  'Choose your bet',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+              Text(
+                'Your total: $_playerTotal',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
-                _betLockedForHand ? 'Bet locked' : 'Choose after deal',
+                'Dealer total: $_dealerTotal',
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              chip(10),
-              chip(25),
-              chip(50),
-              chip(100),
+              Text(
+                'Bet: $_selectedBet',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ],
@@ -889,7 +1090,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       return FilledButton.styleFrom(
         backgroundColor: bg,
         foregroundColor: Colors.white,
-        minimumSize: const Size(0, 50),
+        minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
         ),
@@ -919,7 +1120,9 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           style: style(const Color(0xFF0F766E)),
           onPressed: canConfirmBet ? _confirmBetForHand : null,
           icon: const Icon(Icons.payments),
-          label: const Text('Confirm Bet'),
+          label: Text(
+            widget.tutorialMode ? 'Confirm Practice Bet' : 'Confirm Bet',
+          ),
         ),
       );
     }
@@ -927,18 +1130,20 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     return Row(
       children: [
         Expanded(
-          child: FilledButton(
+          child: FilledButton.icon(
             style: style(const Color(0xFFEF4444)),
             onPressed: canPlayMove ? () => _sendAction("hit") : null,
-            child: const Text('Hit'),
+            icon: const Icon(Icons.add),
+            label: const Text('Hit'),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: FilledButton(
+          child: FilledButton.icon(
             style: style(const Color(0xFF2563EB)),
             onPressed: canPlayMove ? () => _sendAction("stand") : null,
-            child: const Text('Stand'),
+            icon: const Icon(Icons.pan_tool_alt_outlined),
+            label: const Text('Stand'),
           ),
         ),
       ],
@@ -979,7 +1184,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(child: _buildModePill()),
+                _buildHeaderCard(),
                 const SizedBox(height: 14),
                 if (widget.tutorialMode) ...[
                   _buildTutorialCard(),
@@ -991,6 +1196,10 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                 const SizedBox(height: 12),
                 if (_gameId != null && !_gameOver) ...[
                   _buildBetSelector(),
+                  const SizedBox(height: 12),
+                ],
+                if (_gameOver) ...[
+                  _buildRoundSummary(),
                   const SizedBox(height: 12),
                 ],
                 _buildStatusBar(),
@@ -1010,12 +1219,13 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                     ),
                     child: Text(
                       widget.tutorialMode
-                          ? 'Tutorial flow:\n1. Deal cards\n2. Choose a bet\n3. Confirm it\n4. Read the hint\n5. Decide whether to hit or stand'
-                          : 'Deal first to see your cards.\nThen choose and confirm your bet before playing.',
+                          ? 'Tutorial flow:\n1. Deal cards\n2. Choose a practice bet\n3. Confirm it\n4. Read the hint\n5. Decide whether to hit or stand'
+                          : 'Flow:\n1. Deal cards\n2. Choose your bet\n3. Confirm it\n4. Play hit or stand\n5. Result saves automatically',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
+                        height: 1.35,
                       ),
                     ),
                   ),
