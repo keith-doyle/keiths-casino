@@ -1,19 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fyp_app/screens/singleplayer_poker_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
+import '../widgets/info_stat_tile.dart';
 import '../widgets/primary_action_tile.dart';
 import '../widgets/section_card.dart';
-import '../widgets/info_stat_tile.dart';
-import 'profile_screen.dart';
-import 'matches_screen.dart';
-import 'stats_screen.dart';
 import 'blackjack_room_screen.dart';
 import 'blackjack_screen.dart';
 import 'friends_screen.dart';
+import 'matches_screen.dart';
 import 'notifications_screen.dart';
 import 'poker_room_screen.dart';
+import 'profile_screen.dart';
+import 'singleplayer_poker_screen.dart';
+import 'stats_screen.dart';
 import 'tutorial_poker_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -24,6 +24,16 @@ class HomeScreen extends StatelessWidget {
     if (hour < 12) return 'Good morning';
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
+  }
+
+  Widget _sectionLabel(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
+    );
   }
 
   @override
@@ -50,6 +60,7 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_none_rounded),
+                    tooltip: 'Notifications',
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -93,6 +104,7 @@ class HomeScreen extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.person_outline_rounded),
+            tooltip: 'Profile',
             onPressed: () {
               Navigator.push(
                 context,
@@ -102,6 +114,7 @@ class HomeScreen extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Sign out',
             onPressed: () => FirebaseAuth.instance.signOut(),
           ),
         ],
@@ -126,6 +139,7 @@ class HomeScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 20),
+
               SectionCard(
                 title: 'Overview',
                 child: Row(
@@ -148,12 +162,10 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 18),
-              Text(
-                'Blackjack',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 24),
+              _sectionLabel(context, 'Blackjack'),
+
               PrimaryActionTile(
                 icon: Icons.groups_rounded,
                 title: 'Multiplayer Blackjack',
@@ -171,7 +183,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.casino_outlined,
                 title: 'Singleplayer Blackjack',
-                subtitle: 'Play solo and build your stats.',
+                subtitle: 'Play solo, use your coin balance, and build your stats.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -184,7 +196,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.school_outlined,
                 title: 'Tutorial Blackjack',
-                subtitle: 'Play while learning hit, stand, totals, and dealer logic.',
+                subtitle: 'Learn totals, dealer logic, hit, and stand using practice coins.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -195,12 +207,10 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 22),
-              Text(
-                'Poker',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 24),
+              _sectionLabel(context, 'Poker'),
+
               PrimaryActionTile(
                 icon: Icons.groups_rounded,
                 title: 'Multiplayer Poker',
@@ -218,7 +228,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.person_outline_rounded,
                 title: 'Singleplayer Poker',
-                subtitle: 'Play a simplified solo poker experience against table opponents.',
+                subtitle: 'Play a simplified solo poker mode and record stats and matches.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -231,7 +241,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.menu_book_rounded,
                 title: 'Tutorial Poker',
-                subtitle: 'Learn phases, actions, hand rankings, and table flow while playing.',
+                subtitle: 'Learn phases, actions, and table flow while playing with practice chips.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -240,12 +250,10 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 22),
-              Text(
-                'Your Space',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 24),
+              _sectionLabel(context, 'Your Space'),
+
               PrimaryActionTile(
                 icon: Icons.people_alt_outlined,
                 title: 'Friends',
@@ -275,7 +283,7 @@ class HomeScreen extends StatelessWidget {
               PrimaryActionTile(
                 icon: Icons.bar_chart_rounded,
                 title: 'Stats',
-                subtitle: 'Track wins, streaks, coin performance, and more.',
+                subtitle: 'Track wins, streaks, coin performance, and mode splits.',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

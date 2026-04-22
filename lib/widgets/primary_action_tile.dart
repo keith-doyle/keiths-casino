@@ -28,7 +28,9 @@ class PrimaryActionTile extends StatelessWidget {
               : Colors.black.withOpacity(0.05),
           child: Icon(
             icon,
-            color: primary ? Colors.white : Theme.of(context).colorScheme.primary,
+            color: primary
+                ? Colors.white
+                : Theme.of(context).colorScheme.primary,
           ),
         ),
         const SizedBox(width: 14),
@@ -51,6 +53,7 @@ class PrimaryActionTile extends StatelessWidget {
                   color: primary ? Colors.white70 : null,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
+                  height: 1.3,
                 ),
               ),
             ],

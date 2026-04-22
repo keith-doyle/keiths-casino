@@ -24,8 +24,15 @@ class InfoStatTile extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: Colors.white,
-            child: Icon(icon, size: 18),
+            backgroundColor: Theme.of(context)
+                .colorScheme
+                .primary
+                .withOpacity(0.10),
+            child: Icon(
+              icon,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -39,6 +46,8 @@ class InfoStatTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
