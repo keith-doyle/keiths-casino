@@ -90,10 +90,12 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
         });
       }
 
-      loaded.sort((a, b) => a['username']
-          .toString()
-          .toLowerCase()
-          .compareTo(b['username'].toString().toLowerCase()));
+      loaded.sort(
+            (a, b) => a['username']
+            .toString()
+            .toLowerCase()
+            .compareTo(b['username'].toString().toLowerCase()),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -166,6 +168,7 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (_) {
         return SafeArea(
           child: Padding(
@@ -177,7 +180,7 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Invite a Friend',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -185,22 +188,36 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _friends.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
                       final friend = _friends[i];
                       final friendUid = (friend['uid'] ?? '').toString();
-                      final alreadyHere =
-                      _players.any((p) => (p["id"] ?? "").toString() == friendUid);
+                      final alreadyHere = _players.any(
+                            (p) => (p["id"] ?? "").toString() == friendUid,
+                      );
 
-                      return ListTile(
-                        leading: const Icon(Icons.person),
-                        title: Text(friend['username']),
-                        subtitle:
-                        alreadyHere ? const Text('Already in lobby') : null,
-                        trailing: FilledButton(
-                          onPressed:
-                          alreadyHere ? null : () => _sendGameInvite(friend),
-                          child: Text(alreadyHere ? 'Here' : 'Invite'),
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.black.withOpacity(0.06),
+                            child: const Icon(Icons.person),
+                          ),
+                          title: Text(
+                            friend['username'],
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle:
+                          alreadyHere ? const Text('Already in lobby') : null,
+                          trailing: FilledButton(
+                            onPressed:
+                            alreadyHere ? null : () => _sendGameInvite(friend),
+                            child: Text(alreadyHere ? 'Here' : 'Invite'),
+                          ),
                         ),
                       );
                     },
@@ -230,72 +247,76 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
 
     _ws.connectToRoom(roomId: roomId);
 
-    _sub = _ws.stream?.listen((event) {
-      final text = event is String ? event : event.toString();
+    _sub = _ws.stream?.listen(
+          (event) {
+        final text = event is String ? event : event.toString();
 
-      Map<String, dynamic> msg;
-      try {
-        msg = (jsonDecode(text) as Map).cast<String, dynamic>();
-      } catch (_) {
+        Map<String, dynamic> msg;
+        try {
+          msg = (jsonDecode(text) as Map).cast<String, dynamic>();
+        } catch (_) {
+          if (!mounted) return;
+          setState(() {
+            _status = text;
+            _busy = false;
+          });
+          return;
+        }
+
+        final type = msg["type"];
+
+        if (type == "system") {
+          _ws.join(playerId: uid, playerName: _myName);
+
+          if (!mounted) return;
+          setState(() {
+            _status = "Connected. Joining room...";
+          });
+          return;
+        }
+
+        if (type == "table_state") {
+          if (!mounted) return;
+          setState(() {
+            _youId = (msg["you"]?["id"])?.toString();
+            _hostPlayerId = msg["host_player_id"]?.toString();
+            _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
+            _status = "In room ${msg["room_id"]}";
+            _busy = false;
+          });
+          return;
+        }
+
+        if (type == "error") {
+          if (!mounted) return;
+          setState(() {
+            _status = (msg["status"] ?? "Unknown error").toString();
+            _busy = false;
+          });
+          return;
+        }
+      },
+      onError: (e) {
         if (!mounted) return;
         setState(() {
-          _status = text;
+          _status = "WS error: $e";
           _busy = false;
         });
-        return;
-      }
-
-      final type = msg["type"];
-
-      if (type == "system") {
-        _ws.join(playerId: uid, playerName: _myName);
-
+      },
+      onDone: () {
         if (!mounted) return;
         setState(() {
-          _status = "Connected. Joining room...";
-        });
-        return;
-      }
-
-      if (type == "table_state") {
-        if (!mounted) return;
-        setState(() {
-          _youId = (msg["you"]?["id"])?.toString();
-          _hostPlayerId = msg["host_player_id"]?.toString();
-          _players = List<Map<String, dynamic>>.from(msg["players"] ?? []);
-          _status = "In room ${msg["room_id"]}";
+          _status = "Disconnected";
           _busy = false;
         });
-        return;
-      }
-
-      if (type == "error") {
-        if (!mounted) return;
-        setState(() {
-          _status = (msg["status"] ?? "Unknown error").toString();
-          _busy = false;
-        });
-        return;
-      }
-    }, onError: (e) {
-      if (!mounted) return;
-      setState(() {
-        _status = "WS error: $e";
-        _busy = false;
-      });
-    }, onDone: () {
-      if (!mounted) return;
-      setState(() {
-        _status = "Disconnected";
-        _busy = false;
-      });
-    });
+      },
+    );
   }
 
   String _compactStatusText() {
     if (_busy) return 'Joining lobby...';
     if (_players.length < 2) return 'Waiting for more players';
-    return 'Ready to enter table';
+    return 'Lobby ready';
   }
 
   Color _compactStatusColor() {
@@ -320,51 +341,97 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
     return _youId == _hostPlayerId;
   }
 
-  Widget _buildInfoPill(String text) {
+  Widget _buildLobbyPill(String text, {Color? textColor}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.05),
+        color: Colors.black.withOpacity(0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: Colors.white24),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
+          fontSize: 12,
+          color: textColor ?? Colors.white,
         ),
       ),
     );
   }
 
-  Widget _buildStatusCard(ThemeData theme) {
+  Widget _buildHeroCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildLobbyPill('POKER LOBBY'),
+              _buildLobbyPill('Room ${_roomId ?? "-"}'),
+              _buildLobbyPill('Players ${_players.length}'),
+              _buildLobbyPill(_isHost ? 'Host: You' : 'Host: ${_hostName()}'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _compactStatusText(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: _compactStatusColor(),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _players.length < 2
+                ? 'Invite someone or wait for another player to join.'
+                : 'Everyone is ready to move into the poker table.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _compactStatusColor().withOpacity(0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _compactStatusColor().withOpacity(0.55),
-        ),
+        color: Colors.black.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white24),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Text(
-            _compactStatusText(),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: _compactStatusColor(),
-            ),
+          Icon(
+            Icons.info_outline,
+            color: _compactStatusColor(),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _players.length < 2
-                ? 'Minimum 2 players are needed before starting.'
-                : 'Everyone is ready to move into the poker table.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _status,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -377,45 +444,170 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
     final isYou = (_youId != null && pid == _youId);
     final isHost = (_hostPlayerId != null && pid == _hostPlayerId);
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isYou ? Colors.green.withOpacity(0.5) : Colors.white12,
+          width: isYou ? 1.2 : 1,
+        ),
       ),
-      child: ListTile(
-        leading: const Icon(Icons.account_circle),
-        title: Text(name),
-        subtitle: Text(isHost ? 'Host' : 'Player'),
-        trailing: Wrap(
-          spacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (isHost)
-              Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(999),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.white.withOpacity(0.10),
+            child: const Icon(
+              Icons.person,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.white,
+                  ),
                 ),
-                child: const Text(
-                  'HOST',
+                const SizedBox(height: 3),
+                Text(
+                  isHost ? 'Room host' : 'Player in lobby',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isHost)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.withOpacity(0.22),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                'HOST',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.deepPurple.shade100,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          if (isYou)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.20),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                'YOU',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.green.shade100,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayersSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Players in Lobby',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.deepPurple,
-                    fontSize: 11,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
                 ),
               ),
-            if (isYou)
-              const Text(
-                "YOU",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple,
+              TextButton.icon(
+                onPressed: _loadingFriends ? null : _openInviteSheet,
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('Invite'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_players.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Text(
+                _busy ? 'Joining lobby...' : 'No players in lobby',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-          ],
+            )
+          else
+            ListView.builder(
+              itemCount: _players.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemBuilder: (context, i) {
+                final p = _players[i];
+                return _buildPlayerTile(p);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomHint() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: const Text(
+        'Lobby flow:\n1. Join the room\n2. Invite friends if needed\n3. Wait until at least 2 players are present\n4. Enter the table',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white70,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
         ),
       ),
     );
@@ -430,8 +622,9 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final canEnter =
+        _roomId != null && _players.isNotEmpty && currentUid.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -445,106 +638,73 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Room ${_roomId ?? "-"}",
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF1E293B),
+              Color(0xFF0F172A),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _buildHeroCard(),
+                const SizedBox(height: 12),
+                _buildStatusCard(),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
                       children: [
-                        _buildInfoPill('Players: ${_players.length}'),
-                        _buildInfoPill(
-                          _isHost ? 'Host: You' : 'Host: ${_hostName()}',
-                        ),
+                        _buildPlayersSection(),
+                        const SizedBox(height: 12),
+                        _buildBottomHint(),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    _buildStatusCard(theme),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  "Players",
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _loadingFriends ? null : _openInviteSheet,
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Invite'),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: canEnter
+                        ? () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PokerTableScreen(
+                            roomId: _roomId!,
+                            playerId: currentUid,
+                            playerName: _myName,
+                          ),
+                        ),
+                      );
+                    }
+                        : null,
+                    icon: const Icon(Icons.casino),
+                    label: const Text("Enter Table"),
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: _players.isEmpty
-                  ? Center(
-                child: Text(
-                  _busy ? 'Joining lobby...' : 'No players in lobby',
-                  style: theme.textTheme.bodyLarge,
-                ),
-              )
-                  : ListView.builder(
-                itemCount: _players.length,
-                itemBuilder: (context, i) {
-                  final p = _players[i];
-                  return _buildPlayerTile(p);
-                },
-              ),
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: (_roomId == null ||
-                    _players.isEmpty ||
-                    currentUid.isEmpty)
-                    ? null
-                    : () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PokerTableScreen(
-                        roomId: _roomId!,
-                        playerId: currentUid,
-                        playerName: _myName,
+                if (_busy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      "Working...",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.casino),
-                label: const Text("Enter Table"),
-              ),
+                  ),
+              ],
             ),
-            if (_busy)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text("Working..."),
-              ),
-          ],
+          ),
         ),
       ),
     );

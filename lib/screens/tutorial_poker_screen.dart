@@ -24,7 +24,19 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
   int _pot = 0;
 
   static const _ranks = [
-    '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '10',
+    'J',
+    'Q',
+    'K',
+    'A',
   ];
   static const _suits = ['H', 'D', 'C', 'S'];
 
@@ -68,17 +80,19 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     if (!_roundActive || _roundOver) return;
 
     final deck = _freshDeck()
-      ..removeWhere((c) =>
-      _playerCards.contains(c) ||
-          _opponentCards.contains(c) ||
-          _communityCards.contains(c));
+      ..removeWhere(
+            (c) =>
+        _playerCards.contains(c) ||
+            _opponentCards.contains(c) ||
+            _communityCards.contains(c),
+      );
 
     setState(() {
       if (_phase == 'preflop') {
         _communityCards.addAll([
           deck.removeAt(0),
           deck.removeAt(0),
-          deck.removeAt(0)
+          deck.removeAt(0),
         ]);
         _phase = 'flop';
         _status =
@@ -162,6 +176,8 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
         return 'River lesson';
       case 'showdown':
         return 'Showdown lesson';
+      case 'folded':
+        return 'Fold lesson';
       default:
         return 'Poker lesson';
     }
@@ -179,29 +195,87 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
         return 'The river is the final community card. After this, there are no more cards to come.';
       case 'showdown':
         return 'At showdown, the best 5-card poker hand wins. You do not have to use both hole cards.';
+      case 'folded':
+        return 'Folding ends your hand immediately. It is the safest option when continuing would risk more chips with a weak holding.';
       default:
         return 'Start a tutorial round to learn poker phase by phase.';
     }
   }
 
-  Widget _panel(String title, Widget child) {
+  Color _phaseColor() {
+    switch (_phase) {
+      case 'preflop':
+        return Colors.blue.shade300;
+      case 'flop':
+        return Colors.green.shade300;
+      case 'turn':
+        return Colors.orange.shade300;
+      case 'river':
+        return Colors.purple.shade300;
+      case 'showdown':
+        return Colors.amber.shade300;
+      case 'folded':
+        return Colors.red.shade300;
+      default:
+        return Colors.white70;
+    }
+  }
+
+  Widget _pill(String text, {Color? color}) {
+    final fg = color ?? Colors.white;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: (color ?? Colors.white).withOpacity(0.22),
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _panel(String title, Widget child, {Widget? trailing}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
           ),
           const SizedBox(height: 10),
           child,
@@ -210,57 +284,347 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     );
   }
 
-  Widget _cardRow(List<String> cards) {
+  Widget _tableSurface({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(30),
+        gradient: RadialGradient(
+          center: Alignment.center,
+          radius: 1.25,
+          colors: [
+            const Color(0xFF14532D),
+            const Color(0xFF0F3F23),
+            Colors.black.withOpacity(0.92),
+          ],
+        ),
+        border: Border.all(color: Colors.white12, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.30),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _textCard(String card) {
+    final suit = card.substring(card.length - 1).toUpperCase();
+    final isRed = suit == 'H' || suit == 'D';
+
+    return Container(
+      width: 54,
+      height: 78,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Text(
+        card,
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 16,
+          color: isRed ? Colors.red.shade700 : Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _cardRow(List<String> cards, {String emptyText = 'No cards yet'}) {
     if (cards.isEmpty) {
-      return const Text(
-        'No cards yet',
-        style: TextStyle(color: Colors.white70),
+      return Text(
+        emptyText,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontWeight: FontWeight.w600,
+        ),
       );
     }
 
     return Wrap(
+      alignment: WrapAlignment.center,
       spacing: 8,
       runSpacing: 8,
-      children: cards
-          .map(
-            (c) => Container(
-          width: 52,
-          height: 76,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            c,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-      )
-          .toList(),
+      children: cards.map(_textCard).toList(),
     );
   }
 
-  Widget _chip(String text) {
+  Widget _lessonBanner() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(999),
+        color: _phaseColor().withOpacity(0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _phaseColor().withOpacity(0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _lessonTitle(),
+            style: TextStyle(
+              color: _phaseColor(),
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _lessonBody(),
+            style: const TextStyle(
+              color: Colors.white,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white24),
       ),
       child: Text(
-        text,
+        _status,
+        textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w700,
+          height: 1.3,
         ),
+      ),
+    );
+  }
+
+  Widget _opponentSeat() {
+    return _panel(
+      'Opponent',
+      Column(
+        children: [
+          _cardRow(
+            _roundOver ? _opponentCards : List.filled(2, '??'),
+            emptyText: 'Opponent waiting',
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _roundOver
+                ? 'Cards revealed at showdown'
+                : 'Opponent cards stay hidden until the hand ends',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      trailing: _pill(
+        _roundOver ? 'REVEALED' : 'HIDDEN',
+        color: _roundOver ? Colors.orange.shade300 : Colors.white70,
+      ),
+    );
+  }
+
+  Widget _communityPanel() {
+    return _panel(
+      'Community Cards',
+      Column(
+        children: [
+          _cardRow(_communityCards),
+          const SizedBox(height: 10),
+          Text(
+            _communityCards.isEmpty
+                ? 'Shared cards will appear as the hand progresses.'
+                : 'These are shared by both players to build the best 5-card hand.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      trailing: _pill(
+        _phase.toUpperCase(),
+        color: _phaseColor(),
+      ),
+    );
+  }
+
+  Widget _playerPanel() {
+    return _panel(
+      'Your Hole Cards',
+      Column(
+        children: [
+          _cardRow(_playerCards),
+          const SizedBox(height: 10),
+          const Text(
+            'These 2 private cards belong only to you.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      trailing: _pill('YOU', color: Colors.green.shade300),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final disabled = !_roundActive || _roundOver;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: disabled ? null : _check,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 52),
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                icon: const Icon(Icons.check),
+                label: const Text('Check'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: disabled ? null : _raise,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 52),
+                  backgroundColor: const Color(0xFF0F766E),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                icon: const Icon(Icons.arrow_upward),
+                label: const Text('Raise'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: disabled ? null : _fold,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 52),
+              foregroundColor: Colors.red.shade200,
+              side: BorderSide(color: Colors.red.shade200.withOpacity(0.55)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+              ),
+            ),
+            icon: const Icon(Icons.close),
+            label: const Text('Fold'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomAction() {
+    if (!_roundActive && !_roundOver) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _startRound,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 54),
+            backgroundColor: const Color(0xFF3B82F6),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Start Tutorial Round'),
+        ),
+      );
+    }
+
+    if (_roundActive) {
+      return _buildActionButtons();
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _startRound,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 54),
+          backgroundColor: const Color(0xFF3B82F6),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
+        icon: const Icon(Icons.replay),
+        label: const Text('Play Tutorial Again'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final roundStateText = _roundOver
+        ? (_phase == 'folded' ? 'Hand ended by fold' : 'Hand complete')
+        : (_roundActive ? 'Tutorial hand active' : 'Ready to begin');
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tutorial Poker'),
@@ -285,88 +649,57 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
+                alignment: WrapAlignment.center,
                 children: [
-                  _chip('Mode: Tutorial'),
-                  _chip('Phase: ${_phase.toUpperCase()}'),
-                  _chip('Practice Coins: $_coins'),
-                  _chip('Pot: $_pot'),
+                  _pill('Mode: Tutorial', color: Colors.amber.shade300),
+                  _pill('Phase: ${_phase.toUpperCase()}', color: _phaseColor()),
+                  _pill('Practice Coins: $_coins'),
+                  _pill('Pot: $_pot'),
                 ],
               ),
               const SizedBox(height: 14),
-              _panel(
-                _lessonTitle(),
-                Text(
-                  _lessonBody(),
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    height: 1.35,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              _lessonBanner(),
               const SizedBox(height: 14),
-              _panel(
-                'Table Status',
-                Text(
-                  _status,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _panel('Community Cards', _cardRow(_communityCards)),
-              const SizedBox(height: 14),
-              _panel('Your Hole Cards', _cardRow(_playerCards)),
-              const SizedBox(height: 14),
-              if (_roundOver) _panel('Opponent Cards', _cardRow(_opponentCards)),
-              const SizedBox(height: 14),
-              if (!_roundActive && !_roundOver)
-                FilledButton.icon(
-                  onPressed: _startRound,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start Tutorial Round'),
-                )
-              else if (_roundActive)
-                Column(
+              _statusBanner(),
+              const SizedBox(height: 16),
+              _tableSurface(
+                child: Column(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _check,
-                            icon: const Icon(Icons.check),
-                            label: const Text('Check'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _raise,
-                            icon: const Icon(Icons.arrow_upward),
-                            label: const Text('Raise'),
-                          ),
-                        ),
-                      ],
+                    _opponentSeat(),
+                    const SizedBox(height: 14),
+                    _communityPanel(),
+                    const SizedBox(height: 14),
+                    _playerPanel(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              _panel(
+                'Tutorial Flow',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      roundStateText,
+                      style: TextStyle(
+                        color: _phaseColor(),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _fold,
-                        icon: const Icon(Icons.close),
-                        label: const Text('Fold'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Use Check to continue without building the pot. Use Raise to add pressure and grow the pot. Use Fold to end the hand early.',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
-                )
-              else
-                FilledButton.icon(
-                  onPressed: _startRound,
-                  icon: const Icon(Icons.replay),
-                  label: const Text('Play Tutorial Again'),
                 ),
+              ),
+              const SizedBox(height: 14),
+              _buildBottomAction(),
             ],
           ),
         ),

@@ -35,8 +35,27 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
+  Color _resultSoftBg(String result) {
+    switch (result) {
+      case 'Win':
+        return Colors.green.withOpacity(0.10);
+      case 'Loss':
+        return Colors.red.withOpacity(0.10);
+      case 'Push':
+        return Colors.orange.withOpacity(0.10);
+      default:
+        return Colors.black.withOpacity(0.05);
+    }
+  }
+
   int _intVal(Map<String, dynamic>? data, String key) {
     return ((data?[key] ?? 0) as num).toInt();
+  }
+
+  IconData _matchIcon(String gameType) {
+    return gameType.toLowerCase().contains('poker')
+        ? Icons.table_bar_rounded
+        : Icons.casino_rounded;
   }
 
   @override
@@ -79,8 +98,10 @@ class ProfileScreen extends StatelessWidget {
 
                   final blackjackGames = _intVal(blackjack, 'gamesPlayed');
                   final blackjackWins = _intVal(blackjack, 'wins');
-                  final blackjackBestStreak = _intVal(blackjack, 'bestWinStreak');
-                  final blackjackHighestBet = _intVal(blackjack, 'highestBet');
+                  final blackjackBestStreak =
+                  _intVal(blackjack, 'bestWinStreak');
+                  final blackjackHighestBet =
+                  _intVal(blackjack, 'highestBet');
 
                   final pokerGames = _intVal(poker, 'gamesPlayed');
                   final pokerWins = _intVal(poker, 'wins');
@@ -96,8 +117,19 @@ class ProfileScreen extends StatelessWidget {
                   final winRate = _winRate(wins, gamesPlayed);
 
                   return ListView(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                     children: [
+                      Text(
+                        'Player Profile',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Review your account, progress, and recent match activity.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 20),
+
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -120,32 +152,39 @@ class ProfileScreen extends StatelessWidget {
                                   .primary
                                   .withOpacity(0.14),
                               child: Text(
-                                username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                username.isNotEmpty
+                                    ? username[0].toUpperCase()
+                                    : '?',
                                 style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color:
+                                  Theme.of(context).colorScheme.primary,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     username,
-                                    style: Theme.of(context).textTheme.titleLarge,
+                                    style:
+                                    Theme.of(context).textTheme.titleLarge,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     email,
-                                    style: Theme.of(context).textTheme.bodyMedium,
+                                    style:
+                                    Theme.of(context).textTheme.bodyMedium,
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
                                     'Joined ${_fmtDate(created)}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                    Theme.of(context).textTheme.bodySmall,
                                   ),
                                 ],
                               ),
@@ -153,7 +192,9 @@ class ProfileScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 16),
+
                       SectionCard(
                         title: 'Quick Overview',
                         child: Column(
@@ -183,7 +224,8 @@ class ProfileScreen extends StatelessWidget {
                                 Expanded(
                                   child: InfoStatTile(
                                     label: 'Win rate',
-                                    value: '${winRate.toStringAsFixed(1)}%',
+                                    value:
+                                    '${winRate.toStringAsFixed(1)}%',
                                     icon: Icons.bar_chart_rounded,
                                   ),
                                 ),
@@ -206,25 +248,32 @@ class ProfileScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 16),
+
                       SectionCard(
                         title: 'Recent Matches',
                         trailing: TextButton.icon(
                           onPressed: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => MatchesScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => MatchesScreen(),
+                              ),
                             );
                           },
                           icon: const Icon(Icons.history_rounded),
                           label: const Text('See all'),
                         ),
-                        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        child:
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                           stream: recentMatchesQuery.snapshots(),
                           builder: (context, matchSnap) {
                             if (!matchSnap.hasData) {
                               return const Padding(
                                 padding: EdgeInsets.all(20),
-                                child: Center(child: CircularProgressIndicator()),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               );
                             }
 
@@ -234,19 +283,22 @@ class ProfileScreen extends StatelessWidget {
                               return const EmptyStateWidget(
                                 icon: Icons.history_toggle_off_rounded,
                                 title: 'No matches yet',
-                                subtitle: 'Play a game to start building your match history.',
+                                subtitle:
+                                'Play a game to start building your match history.',
                               );
                             }
 
                             return ListView.separated(
                               shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
+                              physics:
+                              const NeverScrollableScrollPhysics(),
                               itemBuilder: (context, i) {
                                 final m = docs[i].data();
                                 final played = _fmtDate(m['playedAt']);
                                 final gameType =
                                 (m['gameType'] ?? 'Unknown').toString();
-                                final result = (m['result'] ?? '-').toString();
+                                final result =
+                                (m['result'] ?? '-').toString();
                                 final mode = (m['mode'] ?? '').toString();
                                 final coinDelta =
                                 ((m['coinDelta'] ?? 0) as num).toInt();
@@ -254,12 +306,9 @@ class ProfileScreen extends StatelessWidget {
                                 return ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   leading: CircleAvatar(
-                                    backgroundColor: Colors.black.withOpacity(0.05),
-                                    child: Icon(
-                                      gameType.toLowerCase().contains('poker')
-                                          ? Icons.table_bar_rounded
-                                          : Icons.sports_esports,
-                                    ),
+                                    backgroundColor:
+                                    Colors.black.withOpacity(0.05),
+                                    child: Icon(_matchIcon(gameType)),
                                   ),
                                   title: Text(
                                     gameType,
@@ -268,39 +317,56 @@ class ProfileScreen extends StatelessWidget {
                                     ),
                                   ),
                                   subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 4),
                                       Text(played),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        mode.isEmpty
-                                            ? ''
-                                            : mode[0].toUpperCase() +
-                                            mode.substring(1),
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
+                                      const SizedBox(height: 4),
+                                      if (mode.isNotEmpty)
+                                        Text(
+                                          mode[0].toUpperCase() +
+                                              mode.substring(1),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                     ],
                                   ),
                                   trailing: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.end,
                                     children: [
-                                      Text(
-                                        result,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          color: _resultColor(result),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _resultSoftBg(result),
+                                          borderRadius:
+                                          BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          result,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: _resultColor(result),
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 6),
                                       Text(
                                         coinDelta > 0
                                             ? '+$coinDelta'
                                             : coinDelta.toString(),
                                         style: TextStyle(
                                           fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w800,
                                           color: coinDelta > 0
                                               ? Colors.green.shade700
                                               : (coinDelta < 0
@@ -312,7 +378,8 @@ class ProfileScreen extends StatelessWidget {
                                   ),
                                 );
                               },
-                              separatorBuilder: (_, __) => const Divider(height: 20),
+                              separatorBuilder: (_, __) =>
+                              const Divider(height: 20),
                               itemCount: docs.length,
                             );
                           },
