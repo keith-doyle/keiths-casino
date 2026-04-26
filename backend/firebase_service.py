@@ -1,6 +1,9 @@
+import os
+from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore
-import os
+
+load_dotenv()
 
 firebase_app = None
 db = None
@@ -14,6 +17,12 @@ def init_firebase():
 
     cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
 
+    if not cred_path:
+        raise ValueError("FIREBASE_SERVICE_ACCOUNT_PATH is missing")
+
+    if not os.path.exists(cred_path):
+        raise ValueError(f"Firebase service account file not found: {cred_path}")
+
     cred = credentials.Certificate(cred_path)
     firebase_app = firebase_admin.initialize_app(cred)
     db = firestore.client()
@@ -22,6 +31,9 @@ def init_firebase():
 
 
 def get_db():
-    if not db:
+    global db
+
+    if db is None:
         return init_firebase()
+
     return db
