@@ -6,6 +6,7 @@ from blackjack import router as blackjack_router
 from ws_blackjack import router as ws_blackjack_router
 from ws_poker import router as ws_poker_router
 from billing import router as billing_router
+from daily_rewards import router as daily_rewards_router
 
 app = FastAPI()
 
@@ -22,3 +23,4 @@ app.include_router(blackjack_router)
 app.include_router(ws_blackjack_router)
 app.include_router(ws_poker_router)
 app.include_router(billing_router)
+app.include_router(daily_rewards_router)
