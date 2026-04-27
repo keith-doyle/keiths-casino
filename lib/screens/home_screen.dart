@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import '../widgets/premium_screen.dart';
+import '../widgets/daily_rewards_card.dart';
 import '../widgets/info_stat_tile.dart';
+import '../widgets/premium_ad_banner.dart';
 import '../widgets/primary_action_tile.dart';
 import '../widgets/section_card.dart';
 import 'blackjack_room_screen.dart';
@@ -50,6 +52,18 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PremiumScreen(),
+                ),
+              );
+            },
+            child: const Text('Upgrade'),
+          ),
+
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: notificationsQuery.snapshots(),
             builder: (context, snap) {
@@ -102,6 +116,7 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
+
           IconButton(
             icon: const Icon(Icons.person_outline_rounded),
             tooltip: 'Profile',
@@ -112,6 +127,7 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
+
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Sign out',
@@ -162,6 +178,12 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 16),
+              const PremiumAdBanner(),
+
+              const SizedBox(height: 16),
+              const DailyRewardCard(),
 
               const SizedBox(height: 24),
               _sectionLabel(context, 'Blackjack'),
