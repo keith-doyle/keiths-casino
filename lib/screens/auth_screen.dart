@@ -89,6 +89,21 @@ class _AuthScreenState extends State<AuthScreen> {
           'createdAt': FieldValue.serverTimestamp(),
           'friends': [],
           'coins': 1000,
+
+          'isPremium': false,
+          'premiumTier': 'free',
+          'premiumStatus': 'free',
+          'premiumSource': 'none',
+          'stripeCustomerId': null,
+          'stripeSubscriptionId': null,
+          'stripePriceId': null,
+          'premiumUpdatedAt': null,
+          'premiumExpiresAt': null,
+
+          'loginStreak': 0,
+          'lastLoginReward': null,
+          'lastLoginRewardAmount': 0,
+          'lastLoginRewardWasPremium': false,
         });
       });
     } on FirebaseAuthException catch (e) {
