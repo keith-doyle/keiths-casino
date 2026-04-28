@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../widgets/premium_screen.dart';
+import 'premium_screen.dart';
 import '../widgets/daily_rewards_card.dart';
 import '../widgets/info_stat_tile.dart';
 import '../widgets/premium_ad_banner.dart';
@@ -52,16 +52,30 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const PremiumScreen(),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: userDoc.snapshots(),
+            builder: (context, snap) {
+              final data = snap.data?.data();
+              final isPremium = data?['isPremium'] == true;
+
+              return TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PremiumScreen(),
+                    ),
+                  );
+                },
+                child: Text(
+                  isPremium ? 'Manage' : 'Upgrade',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isPremium ? Colors.orange : Colors.deepPurple,
+                  ),
                 ),
               );
             },
-            child: const Text('Upgrade'),
           ),
 
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
