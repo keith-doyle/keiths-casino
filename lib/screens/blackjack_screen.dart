@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-
+import '../services/interstitial_ad_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -117,10 +117,18 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
         if (type == "system") {
           if (!mounted) return;
+
+          final systemStatus = (msg["status"] ?? "").toString();
+
           setState(() {
-            _status = (msg["status"] ?? "").toString();
+            _status = systemStatus.toLowerCase().contains('connected to room')
+                ? (widget.tutorialMode
+                ? 'Deal a tutorial hand to begin.'
+                : 'Deal a hand to begin.')
+                : systemStatus;
             _busy = false;
           });
+
           return;
         }
 
@@ -160,6 +168,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                 }
               } else {
                 await _saveMatchStatsAndCoins(_resultStr);
+                await InterstitialAdService.handleCompletedGame();
               }
             } catch (e) {
               if (!mounted) return;
@@ -249,6 +258,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           }
         } else {
           await _saveMatchStatsAndCoins(_resultStr);
+          await InterstitialAdService.handleCompletedGame();
         }
       } catch (e) {
         if (!mounted) return;

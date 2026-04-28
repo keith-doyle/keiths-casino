@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:fyp_app/widgets/playing_card_widget.dart';
 
 class TutorialPokerScreen extends StatefulWidget {
   const TutorialPokerScreen({super.key});
@@ -312,38 +313,11 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     );
   }
 
-  Widget _textCard(String card) {
-    final suit = card.substring(card.length - 1).toUpperCase();
-    final isRed = suit == 'H' || suit == 'D';
-
-    return Container(
-      width: 54,
-      height: 78,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Text(
-        card,
-        style: TextStyle(
-          fontWeight: FontWeight.w900,
-          fontSize: 16,
-          color: isRed ? Colors.red.shade700 : Colors.black87,
-        ),
-      ),
-    );
-  }
-
-  Widget _cardRow(List<String> cards, {String emptyText = 'No cards yet'}) {
+  Widget _cardRow(
+      List<String> cards, {
+        String emptyText = 'No cards yet',
+        bool hidden = false,
+      }) {
     if (cards.isEmpty) {
       return Text(
         emptyText,
@@ -354,11 +328,22 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
       );
     }
 
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: cards.map(_textCard).toList(),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: cards.map((card) {
+          return Padding(
+            padding: const EdgeInsets.all(4),
+            child: PlayingCardWidget(
+              cardId: card,
+              faceDown: hidden,
+              width: 58,
+              height: 86,
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 

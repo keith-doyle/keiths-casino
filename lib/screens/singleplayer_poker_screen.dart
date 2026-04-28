@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:fyp_app/widgets/playing_card_widget.dart';
 
 class SingleplayerPokerScreen extends StatefulWidget {
   const SingleplayerPokerScreen({super.key});
@@ -521,38 +522,11 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
     );
   }
 
-  Widget _textCard(String card) {
-    final suit = card.substring(card.length - 1).toUpperCase();
-    final isRed = suit == 'H' || suit == 'D';
-
-    return Container(
-      width: 56,
-      height: 80,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Text(
-        card,
-        style: TextStyle(
-          fontWeight: FontWeight.w900,
-          fontSize: 16,
-          color: isRed ? Colors.red.shade700 : Colors.black87,
-        ),
-      ),
-    );
-  }
-
-  Widget _cardRow(List<String> cards, {String emptyText = 'No cards yet'}) {
+  Widget _cardRow(
+      List<String> cards, {
+        String emptyText = 'No cards yet',
+        bool hidden = false,
+      }) {
     if (cards.isEmpty) {
       return Text(
         emptyText,
@@ -563,11 +537,22 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       );
     }
 
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: cards.map(_textCard).toList(),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: cards.map((card) {
+          return Padding(
+            padding: const EdgeInsets.all(4),
+            child: PlayingCardWidget(
+              cardId: card,
+              faceDown: hidden,
+              width: 58,
+              height: 86,
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -598,8 +583,9 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       Column(
         children: [
           _cardRow(
-            _roundOver ? _opponentCards : const ['??', '??'],
+            _roundOver ? _opponentCards : _opponentCards,
             emptyText: 'Opponent waiting',
+            hidden: !_roundOver,
           ),
           const SizedBox(height: 10),
           Text(

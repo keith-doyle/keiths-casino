@@ -99,10 +99,16 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
           );
 
           if (!mounted) return;
+
+          final systemStatus = (msg["status"] ?? "").toString();
+
           setState(() {
-            _status = (msg["status"] ?? "").toString();
+            _status = systemStatus.toLowerCase().contains('connected to room')
+                ? 'Waiting for table update.'
+                : systemStatus;
             _busy = false;
           });
+
           return;
         }
 
