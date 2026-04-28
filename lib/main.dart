@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/interstitial_ad_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -14,6 +15,7 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await MobileAds.instance.initialize();
+  await InterstitialAdService.load();
   runApp(const MyApp());
 }
 
