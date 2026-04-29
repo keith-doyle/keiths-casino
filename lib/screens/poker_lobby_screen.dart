@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/blackjack_ws_service.dart';
+import 'invite_friend_screen.dart';
 import 'poker_table_screen.dart';
 
 class PokerLobbyScreen extends StatefulWidget {
@@ -34,16 +35,12 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
 
   String _myName = "-";
 
-  List<Map<String, dynamic>> _friends = [];
-  bool _loadingFriends = false;
-
   @override
   void initState() {
     super.initState();
 
     Future.microtask(() async {
       await _connectAndListen();
-      await _loadFriends();
     });
   }
 
@@ -65,169 +62,19 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
     return uid.length >= 6 ? uid.substring(0, 6) : uid;
   }
 
-  Future<void> _loadFriends() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    setState(() => _loadingFriends = true);
-
-    try {
-      final userDoc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final friendIds = List<String>.from(userDoc.data()?['friends'] ?? []);
-
-      final loaded = <Map<String, dynamic>>[];
-
-      for (final fid in friendIds) {
-        final doc =
-        await FirebaseFirestore.instance.collection('users').doc(fid).get();
-        if (!doc.exists) continue;
-
-        final data = doc.data() ?? {};
-        loaded.add({
-          'uid': fid,
-          'username': (data['username'] ?? 'Unknown').toString(),
-        });
-      }
-
-      loaded.sort(
-            (a, b) => a['username']
-            .toString()
-            .toLowerCase()
-            .compareTo(b['username'].toString().toLowerCase()),
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _friends = loaded;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to load friends')),
-      );
-    } finally {
-      if (mounted) setState(() => _loadingFriends = false);
-    }
-  }
-
-  Future<void> _sendGameInvite(Map<String, dynamic> friend) async {
-    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+  Future<void> _openInviteSheet() async {
     final roomId = _roomId;
-    if (currentUid == null || roomId == null) return;
+    if (roomId == null) return;
 
-    final friendUid = (friend['uid'] ?? '').toString();
-    final friendUsername = (friend['username'] ?? 'Friend').toString();
-
-    if (friendUid.isEmpty) return;
-
-    try {
-      final notificationId = 'game_invite_${currentUid}_$roomId';
-      final notifRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(friendUid)
-          .collection('notifications')
-          .doc(notificationId);
-
-      await notifRef.set({
-        'type': 'game_invite',
-        'fromUid': currentUid,
-        'fromUsername': _myName,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-        'roomId': roomId,
-        'game': 'poker',
-      });
-
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invite sent to $friendUsername')),
-      );
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send invite: ${e.message ?? e.code}')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to send invite')),
-      );
-    }
-  }
-
-  void _openInviteSheet() {
-    if (_friends.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No friends available to invite')),
-      );
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      builder: (_) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Invite a Friend',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _friends.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final friend = _friends[i];
-                      final friendUid = (friend['uid'] ?? '').toString();
-                      final alreadyHere = _players.any(
-                            (p) => (p["id"] ?? "").toString() == friendUid,
-                      );
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.black12),
-                        ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.black.withOpacity(0.06),
-                            child: const Icon(Icons.person),
-                          ),
-                          title: Text(
-                            friend['username'],
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle:
-                          alreadyHere ? const Text('Already in lobby') : null,
-                          trailing: FilledButton(
-                            onPressed:
-                            alreadyHere ? null : () => _sendGameInvite(friend),
-                            child: Text(alreadyHere ? 'Here' : 'Invite'),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InviteFriendScreen(
+          roomId: roomId,
+          game: 'poker',
+          fromUsername: _myName,
+          players: List<Map<String, dynamic>>.from(_players),
+        ),
+      ),
     );
   }
 
@@ -327,9 +174,11 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
 
   String _hostName() {
     if (_hostPlayerId == null || _players.isEmpty) return '-';
+
     try {
-      final host =
-      _players.firstWhere((p) => (p["id"] ?? "").toString() == _hostPlayerId);
+      final host = _players.firstWhere(
+            (p) => (p["id"] ?? "").toString() == _hostPlayerId,
+      );
       return (host["name"] ?? '-').toString();
     } catch (_) {
       return '-';
@@ -540,24 +389,13 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Players in Lobby',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _loadingFriends ? null : _openInviteSheet,
-                icon: const Icon(Icons.person_add_alt_1),
-                label: const Text('Invite'),
-              ),
-            ],
+          const Text(
+            'Players in Lobby',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 8),
           if (_players.isEmpty)
@@ -633,7 +471,7 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1),
-            onPressed: _loadingFriends ? null : _openInviteSheet,
+            onPressed: _openInviteSheet,
             tooltip: 'Invite friend',
           ),
         ],
