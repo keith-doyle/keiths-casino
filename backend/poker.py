@@ -562,7 +562,6 @@ def _finish_round(state: RoomPokerState) -> None:
 
     state.game_started = False
     state.round_over = True
-    state.phase = "showdown"
     state.current_turn_player_id = None
     state.current_bet = 0
 
@@ -570,22 +569,46 @@ def _finish_round(state: RoomPokerState) -> None:
         player.has_acted_this_round = False
         player.current_bet = 0
 
+    if len(active) == 1:
+        winner_id = active[0]
+        winner = state.players[winner_id]
+
+        winner.chips += state.pot
+        state.winner_player_id = winner_id
+        state.winning_hand_name = "Fold Win"
+        winner.hand_name = "Fold Win"
+
+        state.phase = "showdown"
+        final_status = f"{winner.name} wins {state.pot} chips because everyone else folded."
+
+        state.pot = 0
+        state.status = final_status
+        return
+
     if active:
         results = []
 
         for pid in active:
             player = state.players[pid]
-            parsed_cards = [
-                _parse_card(card)
-                for card in (player.cards + state.community_cards)
-            ]
+            combined_cards = player.cards + state.community_cards
+
+            if len(combined_cards) < 5:
+                continue
+
+            parsed_cards = [_parse_card(card) for card in combined_cards]
             best_hand = _best_hand(parsed_cards)
-            results.append((pid, best_hand))
+
+            if best_hand is not None:
+                results.append((pid, best_hand))
+
+        if not results:
+            state.status = "Round ended before showdown."
+            state.pot = 0
+            return
 
         results.sort(key=lambda item: item[1], reverse=True)
 
         best_score = results[0][1]
-
         winners = [pid for pid, score in results if score == best_score]
 
         split_amount = state.pot // len(winners)
@@ -610,6 +633,7 @@ def _finish_round(state: RoomPokerState) -> None:
             winner_names = ", ".join(state.players[pid].name for pid in winners)
             final_status = f"Tie between {winner_names}. Pot split ({split_amount} each) with {state.winning_hand_name}."
 
+    state.phase = "showdown"
     state.pot = 0
     state.status = final_status
 

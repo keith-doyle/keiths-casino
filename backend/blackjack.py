@@ -345,6 +345,22 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
         _room_blackjack_games.pop(room_id, None)
         return RoomBlackjackState(room_id=room_id)
 
+    active_ids = _active_player_ids(state)
+
+    if state.game_started and not state.game_over and len(active_ids) < 2:
+        state.game_started = False
+        state.game_over = False
+        state.dealer_revealed = False
+        state.betting_open = False
+        state.turn_player_id = None
+        state.dealer = []
+        state.deck = []
+
+        for player in state.players.values():
+            _reset_player_for_round(player)
+
+        state.status = "Waiting for another player to start a new round."
+        return state
     if state.turn_player_id == player_id:
         next_pid = _first_active_player(state)
         state.turn_player_id = next_pid

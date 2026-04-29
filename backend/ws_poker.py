@@ -4,6 +4,7 @@ from typing import Dict
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 import poker
+import ws_room
 
 router = APIRouter()
 
@@ -16,6 +17,18 @@ def _get_room(room_id: str) -> Dict[WebSocket, str]:
     return _table_room_sockets[room_id]
 
 
+def _sync_poker_host_from_lobby(room_id: str):
+    state = poker.get_room_poker_game(room_id)
+    lobby_host_player_id = ws_room.get_room_host_player_id(room_id)
+
+    if lobby_host_player_id:
+        state.host_player_id = lobby_host_player_id
+    elif state.player_order:
+        state.host_player_id = state.player_order[0]
+    else:
+        state.host_player_id = None
+
+
 async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
     payload = {"type": "error", "status": status}
     if extra:
@@ -24,6 +37,8 @@ async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
 
 
 async def _broadcast(room_id: str):
+    _sync_poker_host_from_lobby(room_id)
+
     room = _get_room(room_id)
 
     for ws, pid in list(room.items()):
@@ -88,8 +103,10 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
                     player_name=player_name,
                     chips=coins,
                 )
+
                 room[websocket] = player_id
 
+                _sync_poker_host_from_lobby(room_id)
                 await _broadcast(room_id)
                 continue
 
@@ -100,12 +117,16 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
 
             if mtype == "start":
                 try:
+                    _sync_poker_host_from_lobby(room_id)
                     state = poker.get_room_poker_game(room_id)
+
                     if state.host_player_id != player_id:
                         await _send_error(websocket, "Only the host can start the game.")
                         continue
 
                     poker.start_room_game(room_id)
+
+                    _sync_poker_host_from_lobby(room_id)
                     await _broadcast(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
@@ -117,6 +138,8 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
 
                 try:
                     poker.handle_player_action(room_id, player_id, action, amount)
+
+                    _sync_poker_host_from_lobby(room_id)
                     await _broadcast(room_id)
                 except Exception as e:
                     await _send_error(websocket, str(e))
@@ -130,6 +153,7 @@ async def poker_table_ws(websocket: WebSocket, room_id: str):
         if player_id:
             poker.remove_room_player(room_id, player_id)
 
+        _sync_poker_host_from_lobby(room_id)
         await _broadcast(room_id)
 
         if not room:
