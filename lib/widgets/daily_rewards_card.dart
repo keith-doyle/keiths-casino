@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -14,8 +16,11 @@ class DailyRewardCard extends StatefulWidget {
 class _DailyRewardCardState extends State<DailyRewardCard> {
   static const String _baseUrl = 'http://16.170.162.140:8000';
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
+
   bool _loading = true;
   bool _claiming = false;
+  bool _refreshing = false;
   String? _error;
 
   bool _canClaim = false;
@@ -24,18 +29,33 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
   int _loginStreak = 0;
   int _nextReward = 10;
 
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+
   @override
   void initState() {
     super.initState();
-    _loadRewardStatus();
-  }
 
-  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+    final uid = _uid;
+
+    if (uid == null) {
+      _loadRewardStatus();
+      return;
+    }
+
+    _userSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((_) {
+      _loadRewardStatus();
+    });
+  }
 
   Future<void> _loadRewardStatus() async {
     final uid = _uid;
 
     if (uid == null) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Not signed in';
@@ -43,10 +63,12 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
       return;
     }
 
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (_refreshing) return;
+    _refreshing = true;
+
+    if (mounted && _loading == false) {
+      setState(() => _error = null);
+    }
 
     try {
       final response = await http.get(
@@ -59,6 +81,8 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
 
+      if (!mounted) return;
+
       setState(() {
         _canClaim = data['canClaim'] == true;
         _secondsUntilNextClaim =
@@ -67,12 +91,16 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
         _nextReward = ((data['nextReward'] ?? 10) as num).toInt();
         _isPremium = data['isPremium'] == true;
         _loading = false;
+        _error = null;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Reward unavailable';
       });
+    } finally {
+      _refreshing = false;
     }
   }
 
@@ -131,6 +159,12 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
     if (hours <= 0) return '${minutes}m left';
 
     return '${hours}h ${minutes}m left';
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 
   @override

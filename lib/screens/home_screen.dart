@@ -17,6 +17,7 @@ import 'profile_screen.dart';
 import 'singleplayer_poker_screen.dart';
 import 'stats_screen.dart';
 import 'tutorial_poker_screen.dart';
+import 'manage_premium_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
@@ -63,7 +64,9 @@ class HomeScreen extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const PremiumScreen(),
+                      builder: (_) => isPremium
+                          ? const ManagePremiumScreen()
+                          : const PremiumScreen(),
                     ),
                   );
                 },
