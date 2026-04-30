@@ -17,6 +17,7 @@ class Player:
 @dataclass
 class Room:
     id: str
+    game: str = ""
     host_player_id: str = ""
     sockets: Dict[WebSocket, str] = field(default_factory=dict)
     players: Dict[str, Player] = field(default_factory=dict)
@@ -40,7 +41,7 @@ def get_room_host_player_id(room_id: str) -> Optional[str]:
     return room.host_player_id or None
 
 
-def create_room(room_id: str, host_player_id: str = "") -> Room:
+def create_room(room_id: str, host_player_id: str = "", game: str = "") -> Room:
     room_id = room_id.strip().upper()
 
     if not room_id:
@@ -52,6 +53,7 @@ def create_room(room_id: str, host_player_id: str = "") -> Room:
     room = Room(
         id=room_id,
         host_player_id=host_player_id.strip(),
+        game=game.strip().lower(),
     )
     _rooms[room_id] = room
     return room
@@ -60,6 +62,7 @@ def create_room(room_id: str, host_player_id: str = "") -> Room:
 class CreateRoomRequest(BaseModel):
     room_id: str
     host_player_id: str | None = None
+    game: str
 
 
 @router.post("/rooms/create")
@@ -88,10 +91,11 @@ def room_exists_http(room_id: str):
     room = _rooms.get(room_id)
 
     return {
-        "room_id": room_id,
-        "exists": room is not None,
-        "host_player_id": room.host_player_id if room else None,
-    }
+    "room_id": room_id,
+    "exists": room is not None,
+    "host_player_id": room.host_player_id if room else None,
+    "game": room.game if room else None,
+}
 
 
 def _payload_table_state(room: Room, you_id: Optional[str]) -> dict:

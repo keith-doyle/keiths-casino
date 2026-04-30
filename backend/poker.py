@@ -166,6 +166,7 @@ class RoomPokerState:
     turn_index: int = 0
     current_turn_player_id: Optional[str] = None
     pot: int = 0
+    last_pot: int = 0
     current_bet: int = 0
     winner_player_id: Optional[str] = None
     winning_hand_name: Optional[str] = None
@@ -186,6 +187,19 @@ def get_room_poker_game(room_id: str) -> RoomPokerState:
     return _room_poker_games[room_id]
 
 
+def set_room_host_player_id(room_id: str, host_player_id: Optional[str]) -> RoomPokerState:
+    state = get_room_poker_game(room_id)
+
+    if host_player_id and host_player_id in state.players:
+        state.host_player_id = host_player_id
+    elif not state.host_player_id and state.player_order:
+        state.host_player_id = state.player_order[0]
+    elif state.host_player_id and state.host_player_id not in state.players:
+        state.host_player_id = state.player_order[0] if state.player_order else None
+
+    return state
+
+
 def _active_seated_ids(state: RoomPokerState) -> List[str]:
     return [pid for pid in state.player_order if pid in state.players]
 
@@ -201,6 +215,7 @@ def _next_seated_player_id(state: RoomPokerState, start_index: int) -> Optional[
         pid = state.player_order[idx]
         if pid in state.players:
             return pid
+
     return None
 
 
@@ -271,6 +286,7 @@ def _set_first_turn_preflop(state: RoomPokerState) -> None:
     start_index = state.player_order.index(state.big_blind_player_id)
     next_pid = _next_active_player_after_index(state, start_index)
     state.current_turn_player_id = next_pid
+
     if next_pid and next_pid in state.player_order:
         state.turn_index = state.player_order.index(next_pid)
 
@@ -286,6 +302,7 @@ def _next_active_player_after_index(state: RoomPokerState, start_index: int) -> 
         pid = state.player_order[idx]
         if pid in active_ids:
             return pid
+
     return None
 
 
@@ -293,6 +310,7 @@ def _first_active_after_dealer(state: RoomPokerState) -> Optional[str]:
     if state.dealer_player_id and state.dealer_player_id in state.player_order:
         dealer_index = state.player_order.index(state.dealer_player_id)
         return _next_active_player_after_index(state, dealer_index)
+
     return _first_active_player_id(state)
 
 
@@ -332,6 +350,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
     leaving = state.players.pop(player_id, None)
+
     if player_id in state.player_order:
         state.player_order.remove(player_id)
 
@@ -341,8 +360,10 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
     if state.dealer_player_id == player_id:
         state.dealer_player_id = None
         state.dealer_index = -1
+
     if state.small_blind_player_id == player_id:
         state.small_blind_player_id = None
+
     if state.big_blind_player_id == player_id:
         state.big_blind_player_id = None
 
@@ -366,6 +387,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
 
     if state.current_turn_player_id == player_id:
         _advance_turn(state)
+
         if state.current_turn_player_id:
             current = state.players.get(state.current_turn_player_id)
             if current:
@@ -395,6 +417,7 @@ def start_room_game(room_id: str) -> RoomPokerState:
     state.turn_index = 0
     state.current_turn_player_id = None
     state.pot = 0
+    state.last_pot = 0
     state.current_bet = 0
     state.winner_player_id = None
     state.winning_hand_name = None
@@ -412,16 +435,20 @@ def start_room_game(room_id: str) -> RoomPokerState:
     for _ in range(2):
         for pid in state.player_order:
             player = state.players.get(pid)
+
             if not player:
                 continue
+
             if not state.deck:
                 state.deck = _new_deck()
+
             player.cards.append(state.deck.pop())
 
     _set_first_turn_preflop(state)
 
     if state.current_turn_player_id:
         current = state.players.get(state.current_turn_player_id)
+
         if current:
             state.status = (
                 f"Dealer: {state.players[state.dealer_player_id].name}. "
@@ -439,28 +466,35 @@ def _deal_community_cards(state: RoomPokerState, count: int) -> None:
     for _ in range(count):
         if not state.deck:
             state.deck = _new_deck()
+
         state.community_cards.append(state.deck.pop())
 
 
 def _first_active_player_id(state: RoomPokerState) -> Optional[str]:
     for pid in state.player_order:
         player = state.players.get(pid)
+
         if player and not player.folded:
             return pid
+
     return None
 
 
 def _active_player_ids(state: RoomPokerState) -> List[str]:
     ids: List[str] = []
+
     for pid in state.player_order:
         player = state.players.get(pid)
+
         if player and not player.folded:
             ids.append(pid)
+
     return ids
 
 
 def _advance_turn(state: RoomPokerState) -> None:
     active_ids = _active_player_ids(state)
+
     if not active_ids:
         state.current_turn_player_id = None
         return
@@ -473,6 +507,7 @@ def _advance_turn(state: RoomPokerState) -> None:
     current_pos = active_ids.index(state.current_turn_player_id)
     next_pos = (current_pos + 1) % len(active_ids)
     next_pid = active_ids[next_pos]
+
     state.current_turn_player_id = next_pid
     state.turn_index = state.player_order.index(next_pid)
 
@@ -485,6 +520,7 @@ def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
 
     for pid in active_ids:
         player = state.players.get(pid)
+
         if not player:
             return False
 
@@ -499,9 +535,11 @@ def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
 
 def _reset_action_flags(state: RoomPokerState) -> None:
     state.current_bet = 0
+
     for player in state.players.values():
         if not player.folded:
             player.has_acted_this_round = False
+
         player.current_bet = 0
 
 
@@ -560,6 +598,7 @@ def _finish_round(state: RoomPokerState) -> None:
     active = _active_player_ids(state)
     final_status = "Round complete."
 
+    state.last_pot = state.pot
     state.game_started = False
     state.round_over = True
     state.current_turn_player_id = None
@@ -580,7 +619,6 @@ def _finish_round(state: RoomPokerState) -> None:
 
         state.phase = "showdown"
         final_status = f"{winner.name} wins {state.pot} chips because everyone else folded."
-
         state.pot = 0
         state.status = final_status
         return
@@ -610,13 +648,13 @@ def _finish_round(state: RoomPokerState) -> None:
 
         best_score = results[0][1]
         winners = [pid for pid, score in results if score == best_score]
-
         split_amount = state.pot // len(winners)
 
         for pid in winners:
             state.players[pid].chips += split_amount
 
         remainder = state.pot % len(winners)
+
         if remainder > 0:
             state.players[winners[0]].chips += remainder
 
@@ -651,6 +689,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
         raise ValueError("It is not your turn.")
 
     player = state.players.get(player_id)
+
     if not player:
         raise ValueError("Player not found.")
 
@@ -665,6 +704,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
     elif action == "check":
         if state.current_bet != player.current_bet:
             raise ValueError("Cannot check, must call or fold.")
+
         player.has_acted_this_round = True
         state.status = f"{player.name} checked"
 
@@ -715,16 +755,20 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
 
     if _all_active_players_have_matched_bet(state):
         _move_to_next_phase(state)
+
         if state.game_started and state.current_turn_player_id:
             current = state.players.get(state.current_turn_player_id)
+
             if current:
                 state.status = f"{state.status} {current.name}'s turn"
+
         return state
 
     _advance_turn(state)
 
     if state.current_turn_player_id:
         current = state.players.get(state.current_turn_player_id)
+
         if current:
             state.status = f"{current.name}'s turn"
 
@@ -733,6 +777,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
 
 def room_state_to_payload(room_id: str, you_id: str) -> dict:
     state = get_room_poker_game(room_id)
+    display_pot = state.last_pot if state.round_over else state.pot
 
     return {
         "type": "table_state",
@@ -759,7 +804,7 @@ def room_state_to_payload(room_id: str, you_id: str) -> dict:
         "round_over": state.round_over,
         "phase": state.phase,
         "community_cards": state.community_cards,
-        "pot": state.pot,
+        "pot": display_pot,
         "current_bet": state.current_bet,
         "winner_player_id": state.winner_player_id,
         "winning_hand_name": state.winning_hand_name,

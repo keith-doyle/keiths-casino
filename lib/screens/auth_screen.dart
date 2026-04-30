@@ -171,7 +171,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Card Games Compendium',
+                      " Keith's Casino " ,
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 8),

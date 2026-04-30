@@ -54,6 +54,7 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
           body: jsonEncode({
             'room_id': roomCode,
             'host_player_id': currentUid,
+            'game': 'poker',
           }),
         );
 
@@ -117,10 +118,18 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final exists = data['exists'] == true;
+      final roomGame = (data['game'] ?? '').toString().toLowerCase();
 
       if (!exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('That room code does not exist.')),
+        );
+        return;
+      }
+
+      if (roomGame != 'poker') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That room code belongs to Blackjack.')),
         );
         return;
       }
