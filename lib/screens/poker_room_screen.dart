@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -32,8 +31,7 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
   }
 
   Future<void> _createRoom() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final currentUid = currentUser?.uid;
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You must be signed in to create a room.')),
@@ -127,9 +125,23 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
         return;
       }
 
-      if (roomGame != 'poker') {
+      if (roomGame.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Room game type is missing. Restart server and create a fresh room.')),
+        );
+        return;
+      }
+
+      if (roomGame == 'blackjack') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('That room code belongs to Blackjack.')),
+        );
+        return;
+      }
+
+      if (roomGame != 'poker') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unknown room type: $roomGame')),
         );
         return;
       }

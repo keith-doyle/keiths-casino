@@ -125,9 +125,23 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
         return;
       }
 
-      if (roomGame != 'blackjack') {
+      if (roomGame.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Room game type is missing. Restart server and create a fresh room.')),
+        );
+        return;
+      }
+
+      if (roomGame == 'poker') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('That room code belongs to Poker.')),
+        );
+        return;
+      }
+
+      if (roomGame != 'blackjack') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unknown room type: $roomGame')),
         );
         return;
       }

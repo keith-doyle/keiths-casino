@@ -27,25 +27,36 @@ _rooms: Dict[str, Room] = {}
 
 
 def room_exists(room_id: str) -> bool:
-    return room_id in _rooms
+    return room_id.strip().upper() in _rooms
 
 
 def _room(room_id: str) -> Optional[Room]:
-    return _rooms.get(room_id)
+    return _rooms.get(room_id.strip().upper())
 
 
 def get_room_host_player_id(room_id: str) -> Optional[str]:
-    room = _rooms.get(room_id)
+    room = _rooms.get(room_id.strip().upper())
     if room is None:
-      return None
+        return None
     return room.host_player_id or None
+
+
+def get_room_game(room_id: str) -> Optional[str]:
+    room = _rooms.get(room_id.strip().upper())
+    if room is None:
+        return None
+    return room.game or None
 
 
 def create_room(room_id: str, host_player_id: str = "", game: str = "") -> Room:
     room_id = room_id.strip().upper()
+    game = game.strip().lower()
 
     if not room_id:
         raise ValueError("Room id is required.")
+
+    if game not in {"blackjack", "poker"}:
+        raise ValueError("Game must be blackjack or poker.")
 
     if room_id in _rooms:
         raise ValueError("Room already exists.")
@@ -53,7 +64,7 @@ def create_room(room_id: str, host_player_id: str = "", game: str = "") -> Room:
     room = Room(
         id=room_id,
         host_player_id=host_player_id.strip(),
-        game=game.strip().lower(),
+        game=game,
     )
     _rooms[room_id] = room
     return room
@@ -69,19 +80,28 @@ class CreateRoomRequest(BaseModel):
 def create_room_http(body: CreateRoomRequest):
     room_id = body.room_id.strip().upper()
     host_player_id = (body.host_player_id or "").strip()
+    game = body.game.strip().lower()
 
     if not room_id:
         raise HTTPException(status_code=400, detail="Room id is required.")
 
+    if game not in {"blackjack", "poker"}:
+        raise HTTPException(status_code=400, detail="Game must be blackjack or poker.")
+
     if room_id in _rooms:
         raise HTTPException(status_code=409, detail="Room already exists.")
 
-    create_room(room_id, host_player_id=host_player_id)
+    room = create_room(
+        room_id=room_id,
+        host_player_id=host_player_id,
+        game=game,
+    )
 
     return {
         "ok": True,
-        "room_id": room_id,
-        "host_player_id": host_player_id,
+        "room_id": room.id,
+        "host_player_id": room.host_player_id,
+        "game": room.game,
     }
 
 
@@ -91,11 +111,11 @@ def room_exists_http(room_id: str):
     room = _rooms.get(room_id)
 
     return {
-    "room_id": room_id,
-    "exists": room is not None,
-    "host_player_id": room.host_player_id if room else None,
-    "game": room.game if room else None,
-}
+        "room_id": room_id,
+        "exists": room is not None,
+        "host_player_id": room.host_player_id if room else None,
+        "game": room.game if room else None,
+    }
 
 
 def _payload_table_state(room: Room, you_id: Optional[str]) -> dict:
@@ -112,6 +132,7 @@ def _payload_table_state(room: Room, you_id: Optional[str]) -> dict:
         "you": you,
         "players": players_list,
         "host_player_id": room.host_player_id,
+        "game": room.game,
     }
 
 
@@ -134,6 +155,7 @@ async def _send_error(ws: WebSocket, status: str, extra: dict | None = None):
 async def room_ws(ws: WebSocket, room_id: str):
     room_id = room_id.strip().upper()
     await ws.accept()
+
     room = _room(room_id)
     if room is None:
         await _send_error(ws, "Room does not exist.")
@@ -186,6 +208,7 @@ async def room_ws(ws: WebSocket, room_id: str):
 
     except WebSocketDisconnect:
         pid = room.sockets.pop(ws, "")
+
         if pid and pid in room.players:
             room.players.pop(pid, None)
 
