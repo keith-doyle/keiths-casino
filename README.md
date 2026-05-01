@@ -1,16 +1,55 @@
-# fyp_app
+# Keith's Casino (FYP Project)
 
-A new Flutter project.
+A multiplayer mobile casino application built using Flutter and FastAPI, featuring real-time gameplay and private lobby systems.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## Overview
 
-A few resources to get you started if this is your first Flutter project:
+Keith’s Casino is a full-stack mobile application developed as a Final Year Project.  
+It allows users to create private game rooms and play card games with others in real-time.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+The platform currently supports:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Blackjack (multiplayer)
+- Poker (Texas Hold’em – multiplayer)
+- Private lobby system with room codes
+- Real-time gameplay using WebSockets
+- Cloud deployment on AWS (EC2 backend)
+
+---
+
+## Tech Stack
+
+Frontend:
+- Flutter (Dart)
+- Firebase Authentication
+
+Backend:
+- FastAPI (Python)
+- WebSockets for real-time communication
+
+Infrastructure:
+- AWS EC2 (backend hosting)
+
+---
+
+## Features
+
+- Create and join private game rooms using unique room codes
+- Real-time multiplayer gameplay across different devices and networks
+- Separate game environments for Poker and Blackjack
+- Turn-based game logic handled server-side
+- Live game state synchronisation via WebSockets
+
+---
+
+## Project Purpose
+
+This project demonstrates:
+
+- Full-stack mobile application development
+- Real-time multiplayer system design
+- Backend game state management
+- Cloud deployment and networking
+- UI/UX design and iteration
