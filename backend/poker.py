@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import random
 from itertools import combinations
-
+#Defines poker card ranking
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["H", "D", "C", "S"]
 
@@ -33,35 +33,35 @@ HAND_RANK_NAMES = [
     "Four of a Kind",
     "Straight Flush",
 ]
-
+#Blind constants 
 SMALL_BLIND_AMOUNT = 10
 BIG_BLIND_AMOUNT = 20
 
-
+#Creates shuffled poker deck
 def _new_deck() -> List[str]:
     deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
     random.shuffle(deck)
     return deck
 
-
+#Turns card string into rank/suit value for scoring
 def _parse_card(card: str):
     rank = card[:-1]
     suit = card[-1]
     return RANK_ORDER[rank], suit
 
-
+#Counts rank duplicates in a hand
 def _get_rank_counts(cards):
     counts = {}
     for rank, _ in cards:
         counts[rank] = counts.get(rank, 0) + 1
     return counts
 
-
+#Returns true if all cards share same suit
 def _is_flush(cards):
     suits = [suit for _, suit in cards]
     return len(set(suits)) == 1
 
-
+#Detects straight returns its high card 
 def _is_straight(ranks):
     unique = sorted(set(ranks))
     if len(unique) != 5:
@@ -75,7 +75,7 @@ def _is_straight(ranks):
 
     return False, 0
 
-
+#Ranks one 5 card poker hand from high card to straight flush
 def _evaluate_5(cards):
     ranks = sorted([rank for rank, _ in cards], reverse=True)
     counts = _get_rank_counts(cards)
@@ -129,7 +129,7 @@ def _evaluate_5(cards):
 
     return 0, ranks
 
-
+#Finds best 5 card from 7 cards in play 
 def _best_hand(cards7):
     best = None
     for combo in combinations(cards7, 5):
@@ -138,7 +138,7 @@ def _best_hand(cards7):
             best = score
     return best
 
-
+#Player state, cards chips hand name bet
 @dataclass
 class PokerPlayerState:
     id: str
@@ -150,7 +150,7 @@ class PokerPlayerState:
     current_bet: int = 0
     hand_name: Optional[str] = None
 
-
+#Multiplayer room state, stores phase community cards pot current bet winner blinds
 @dataclass
 class RoomPokerState:
     room_id: str
@@ -177,16 +177,16 @@ class RoomPokerState:
     small_blind_amount: int = SMALL_BLIND_AMOUNT
     big_blind_amount: int = BIG_BLIND_AMOUNT
 
-
+#Multiplayer game state storage
 _room_poker_games: Dict[str, RoomPokerState] = {}
 
-
+#Fetches or creates poker room state 
 def get_room_poker_game(room_id: str) -> RoomPokerState:
     if room_id not in _room_poker_games:
         _room_poker_games[room_id] = RoomPokerState(room_id=room_id)
     return _room_poker_games[room_id]
 
-
+#Keeps table host aligned with lobby host
 def set_room_host_player_id(room_id: str, host_player_id: Optional[str]) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
@@ -199,11 +199,11 @@ def set_room_host_player_id(room_id: str, host_player_id: Optional[str]) -> Room
 
     return state
 
-
+#Seat order of players 
 def _active_seated_ids(state: RoomPokerState) -> List[str]:
     return [pid for pid in state.player_order if pid in state.players]
 
-
+#Finds next connceted seat
 def _next_seated_player_id(state: RoomPokerState, start_index: int) -> Optional[str]:
     seated_ids = _active_seated_ids(state)
     if not seated_ids:
@@ -218,7 +218,7 @@ def _next_seated_player_id(state: RoomPokerState, start_index: int) -> Optional[
 
     return None
 
-
+#Logic for rotating blinds and dealer
 def _rotate_dealer_and_blinds(state: RoomPokerState) -> None:
     seated_ids = _active_seated_ids(state)
     if len(seated_ids) < 2:
@@ -252,14 +252,14 @@ def _rotate_dealer_and_blinds(state: RoomPokerState) -> None:
     state.small_blind_player_id = small_blind_pid
     state.big_blind_player_id = big_blind_pid
 
-
+#Takes blind chips from a player 
 def _post_blind(player: PokerPlayerState, amount: int) -> int:
     posted = min(player.chips, amount)
     player.chips -= posted
     player.current_bet += posted
     return posted
 
-
+#Apply the blinds cost for players 
 def _apply_blinds(state: RoomPokerState) -> None:
     state.pot = 0
     state.current_bet = 0
@@ -275,7 +275,7 @@ def _apply_blinds(state: RoomPokerState) -> None:
         state.pot += bb_posted
         state.current_bet = bb_posted
 
-
+#Chooses first player to act preflop
 def _set_first_turn_preflop(state: RoomPokerState) -> None:
     if not state.big_blind_player_id or state.big_blind_player_id not in state.player_order:
         state.current_turn_player_id = _first_active_player_id(state)
@@ -290,7 +290,7 @@ def _set_first_turn_preflop(state: RoomPokerState) -> None:
     if next_pid and next_pid in state.player_order:
         state.turn_index = state.player_order.index(next_pid)
 
-
+#Finds next non folded player 
 def _next_active_player_after_index(state: RoomPokerState, start_index: int) -> Optional[str]:
     active_ids = _active_player_ids(state)
     if not active_ids:
@@ -305,7 +305,7 @@ def _next_active_player_after_index(state: RoomPokerState, start_index: int) -> 
 
     return None
 
-
+#Chooses the first player to act preflop
 def _first_active_after_dealer(state: RoomPokerState) -> Optional[str]:
     if state.dealer_player_id and state.dealer_player_id in state.player_order:
         dealer_index = state.player_order.index(state.dealer_player_id)
@@ -313,7 +313,7 @@ def _first_active_after_dealer(state: RoomPokerState) -> Optional[str]:
 
     return _first_active_player_id(state)
 
-
+#Adds/ updates poker seat 
 def add_room_player(
     room_id: str,
     player_id: str,
@@ -345,7 +345,7 @@ def add_room_player(
     state.status = f"{player_name} joined the table."
     return state
 
-
+#Handles disconnect cleanup 
 def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
@@ -395,7 +395,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomPokerState:
 
     return state
 
-
+#Starts new multiplayer round
 def start_room_game(room_id: str) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
@@ -461,7 +461,7 @@ def start_room_game(room_id: str) -> RoomPokerState:
 
     return state
 
-
+#Adds card to shared table
 def _deal_community_cards(state: RoomPokerState, count: int) -> None:
     for _ in range(count):
         if not state.deck:
@@ -469,7 +469,7 @@ def _deal_community_cards(state: RoomPokerState, count: int) -> None:
 
         state.community_cards.append(state.deck.pop())
 
-
+#Finds first active non folded player 
 def _first_active_player_id(state: RoomPokerState) -> Optional[str]:
     for pid in state.player_order:
         player = state.players.get(pid)
@@ -479,7 +479,7 @@ def _first_active_player_id(state: RoomPokerState) -> Optional[str]:
 
     return None
 
-
+#Returns players still live in the hand
 def _active_player_ids(state: RoomPokerState) -> List[str]:
     ids: List[str] = []
 
@@ -491,7 +491,7 @@ def _active_player_ids(state: RoomPokerState) -> List[str]:
 
     return ids
 
-
+#Moves action to the next active poker player
 def _advance_turn(state: RoomPokerState) -> None:
     active_ids = _active_player_ids(state)
 
@@ -511,7 +511,7 @@ def _advance_turn(state: RoomPokerState) -> None:
     state.current_turn_player_id = next_pid
     state.turn_index = state.player_order.index(next_pid)
 
-
+#Detects when betting completes 
 def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
     active_ids = _active_player_ids(state)
 
@@ -532,7 +532,7 @@ def _all_active_players_have_matched_bet(state: RoomPokerState) -> bool:
 
     return True
 
-
+#Resets current bet to 0 for new hand
 def _reset_action_flags(state: RoomPokerState) -> None:
     state.current_bet = 0
 
@@ -542,7 +542,7 @@ def _reset_action_flags(state: RoomPokerState) -> None:
 
         player.current_bet = 0
 
-
+#Progresses games phases preflop flop turn river showdown
 def _move_to_next_phase(state: RoomPokerState) -> None:
     if state.phase == "preflop":
         _deal_community_cards(state, 3)
@@ -572,7 +572,7 @@ def _move_to_next_phase(state: RoomPokerState) -> None:
         _finish_round(state)
         return
 
-
+#Resets poker room without deleting players 
 def _reset_round_state(state: RoomPokerState) -> None:
     state.game_started = False
     state.round_over = False
@@ -593,7 +593,7 @@ def _reset_round_state(state: RoomPokerState) -> None:
         player.current_bet = 0
         player.hand_name = None
 
-
+#Finish round logic handling, handles folds wins best hand
 def _finish_round(state: RoomPokerState) -> None:
     active = _active_player_ids(state)
     final_status = "Round complete."
@@ -675,7 +675,7 @@ def _finish_round(state: RoomPokerState) -> None:
     state.pot = 0
     state.status = final_status
 
-
+#Player action handling
 def handle_player_action(room_id: str, player_id: str, action: str, amount: int = 0) -> RoomPokerState:
     state = get_room_poker_game(room_id)
 
@@ -774,7 +774,7 @@ def handle_player_action(room_id: str, player_id: str, action: str, amount: int 
 
     return state
 
-
+#Builds table_state json received by flutter ui for one player
 def room_state_to_payload(room_id: str, you_id: str) -> dict:
     state = get_room_poker_game(room_id)
     display_pot = state.last_pot if state.round_over else state.pot

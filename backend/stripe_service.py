@@ -6,7 +6,7 @@ load_dotenv()
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-
+#Loads required secret configuration safely
 def require_env(name: str) -> str:
     value = os.getenv(name)
 
@@ -15,7 +15,7 @@ def require_env(name: str) -> str:
 
     return value
 
-
+#Converts app plan name to Stripe price id
 def get_price_id(plan: str) -> str:
     clean_plan = plan.lower().strip()
 
@@ -27,7 +27,7 @@ def get_price_id(plan: str) -> str:
 
     raise ValueError("Invalid plan")
 
-
+#Creates hosted Stripe subscription checkout.
 def create_checkout_session(uid: str, email: str, plan: str) -> str:
     if not stripe.api_key:
         raise ValueError("STRIPE_SECRET_KEY is missing")
@@ -66,7 +66,7 @@ def create_checkout_session(uid: str, email: str, plan: str) -> str:
 
     return session.url
 
-
+#Verifies incoming Stripe webhook signature.
 def construct_webhook_event(payload: bytes, signature: str):
     webhook_secret = require_env("STRIPE_WEBHOOK_SECRET")
 

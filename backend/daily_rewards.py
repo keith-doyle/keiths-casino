@@ -8,15 +8,15 @@ router = APIRouter(prefix="/rewards", tags=["rewards"])
 PREMIUM_REWARDS = [10, 25, 50, 100, 150, 250, 500]
 FREE_REWARD = 10
 
-
+#body with uid for claiming daily reward
 class DailyRewardRequest(BaseModel):
     uid: str
 
-
+#create timezone aware 
 def now_utc():
     return datetime.now(timezone.utc)
 
-
+#normalises firestore timestamps
 def normalize_firestore_datetime(value):
     if value is None:
         return None
@@ -29,7 +29,7 @@ def normalize_firestore_datetime(value):
 
     return None
 
-
+#chooses reward from premium reward track based on streak
 def calculate_premium_reward(streak: int) -> int:
     if streak <= 0:
         return PREMIUM_REWARDS[0]
@@ -37,7 +37,7 @@ def calculate_premium_reward(streak: int) -> int:
     index = min(streak, len(PREMIUM_REWARDS)) - 1
     return PREMIUM_REWARDS[index]
 
-
+#Blocks claim if under 20 hours, resets streak if over 48 hours 
 def calculate_next_streak(last_claim, current_streak: int) -> int:
     current_time = now_utc()
 
@@ -57,7 +57,7 @@ def calculate_next_streak(last_claim, current_streak: int) -> int:
 
     return current_streak + 1
 
-
+#Claims daily coins and updates streak
 @router.post("/claim-daily")
 async def claim_daily_reward(data: DailyRewardRequest):
     db = get_db()
@@ -106,7 +106,7 @@ async def claim_daily_reward(data: DailyRewardRequest):
         "message": "Daily reward claimed successfully",
     }
 
-
+#Reads user reward state and returns can claim, timer ,streak, next reward etc 
 @router.get("/status/{uid}")
 async def get_daily_reward_status(uid: str):
     db = get_db()

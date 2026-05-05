@@ -1,7 +1,26 @@
+Local backend run
+
 cd C:\Dev\fyp_app\backend
 .\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
-cd Downloads
+
+SSH into EC2
+
+cd C:\Dev\fyp_app\backend
 ssh -i .\aws.pem ubuntu@16.170.162.140
-scp -i .\aws.pem .\app.py ubuntu@16.170.162.140:/home/ubuntu/
+
+Manually start EC2
+
+cd ~/backend
+source venv/bin/activate
+uvicorn app:app --host 0.0.0.0 --port 8000
+
+Launch EC2 with script
+
+cd ~/backend
+./start_server.sh
+
+Uploading to EC2
+cd C:\Dev\fyp_app\backend
+scp -i .\aws.pem .\*.py ubuntu@16.170.162.140:/home/ubuntu/backend/

@@ -8,7 +8,7 @@ load_dotenv()
 firebase_app = None
 db = None
 
-
+#Loads Firebase service account path from .env, initializes Firebase Admin, and creates Firestore db client.
 def init_firebase():
     global firebase_app, db
 
@@ -29,7 +29,7 @@ def init_firebase():
 
     return db
 
-
+#Other backend services call get_db instead of re-initializing Firebase.
 def get_db():
     global db
 

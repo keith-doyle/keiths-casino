@@ -22,14 +22,14 @@ def read_stripe_value(obj, key, default=None):
 
     return default
 
-
+#Extract the stripe price id from the sub first line item, tells the app whether the customer is monthly or yearly 
 def get_price_id_from_subscription(subscription):
     try:
         return subscription["items"]["data"][0]["price"]["id"]
     except Exception:
         return None
 
-
+#LEts firestore store when the subscription is going to end 
 def get_period_end_from_subscription(subscription):
     try:
         current_period_end = subscription["current_period_end"]
@@ -37,7 +37,7 @@ def get_period_end_from_subscription(subscription):
     except Exception:
         return None
 
-
+#Stripe price is converted into monthly and yearly products value
 def get_premium_tier(price_id):
     if price_id == MONTHLY_PRICE_ID:
         return "monthly"
@@ -47,7 +47,7 @@ def get_premium_tier(price_id):
 
     return "unknown"
 
-
+#Reads the stripe subscription status string
 def get_premium_status(subscription):
     status = read_stripe_value(subscription, "status", "unknown")
     cancel_at_period_end = read_stripe_value(subscription, "cancel_at_period_end", False)
@@ -57,12 +57,12 @@ def get_premium_status(subscription):
 
     return status
 
-
+#Returns true for active or trialing stripe subs
 def subscription_has_premium_access(subscription):
     status = read_stripe_value(subscription, "status", "unknown")
     return status in ["active", "trialing"]
 
-
+#Queries users where stripCustomerID equals given customer id
 def find_user_by_stripe_customer_id(customer_id):
     if not customer_id:
         return None
@@ -81,7 +81,7 @@ def find_user_by_stripe_customer_id(customer_id):
 
     return None
 
-
+#Updates user premium fields after successful Stripe checkout
 def update_user_subscription_from_checkout(uid, customer_id, subscription_id, subscription):
     db = get_db()
 
@@ -102,7 +102,7 @@ def update_user_subscription_from_checkout(uid, customer_id, subscription_id, su
         merge=True,
     )
 
-
+#Finds user by stripe customer id and updates premium fields for sub event
 def update_user_subscription(subscription):
     customer_id = read_stripe_value(subscription, "customer")
     uid = find_user_by_stripe_customer_id(customer_id)
@@ -131,7 +131,7 @@ def update_user_subscription(subscription):
 
     return True
 
-
+#Removes premium when subscription has ended depending on end date
 def cancel_user_subscription(subscription):
     customer_id = read_stripe_value(subscription, "customer")
     uid = find_user_by_stripe_customer_id(customer_id)
@@ -155,7 +155,7 @@ def cancel_user_subscription(subscription):
 
     return True
 
-
+#Reads users premium fields and returns a compact status object
 def get_user_premium_status(uid):
     db = get_db()
     doc = db.collection("users").document(uid).get()

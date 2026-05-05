@@ -3,15 +3,15 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter
-
+#Defines ranks and suits for 52 card deck
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["H", "D", "C", "S"]
 
-
+#Builds deck with rank and suits 
 def new_deck() -> List[str]:
     return [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
 
-
+#Defines face cards values 
 def card_value(card_id: str) -> int:
     rank = card_id[:-1]
     if rank == "A":
@@ -20,10 +20,10 @@ def card_value(card_id: str) -> int:
         return 10
     return int(rank)
 
-
+#Unused HTTP features from previous blackjack version
 router = APIRouter(prefix="/blackjack", tags=["blackjack"])
 
-
+#Simpler Tutorial / Singleplayer state object 
 @dataclass
 class BlackjackState:
     deck: List[str]
@@ -32,16 +32,16 @@ class BlackjackState:
     status: str
     game_over: bool
 
-
+#Server memory for Singleplayer hand
 _current_blackjack: Optional[BlackjackState] = None
 
-
+#Shuffles deck
 def _new_deck() -> List[str]:
     deck = new_deck()
     random.shuffle(deck)
     return deck
 
-
+#Bust logic + totals card values, counts aces. IF over 21 with ace converts from 11-1
 def _hand_value(cards: List[str]) -> int:
     total = sum(card_value(c) for c in cards)
     aces = sum(1 for c in cards if c[:-1] == "A")
@@ -50,19 +50,19 @@ def _hand_value(cards: List[str]) -> int:
         aces -= 1
     return total
 
-
+#Deal 1 card from room deck into player / dealers hand
 def _deal_card_from_deck(deck: List[str], target: List[str]) -> None:
     if not deck:
         deck.extend(_new_deck())
     target.append(deck.pop())
 
-
+#Deals 1 card to target from a singleplayer state 
 def _deal_card(state: BlackjackState, target: List[str]) -> None:
     if not state.deck:
         state.deck = _new_deck()
     target.append(state.deck.pop())
 
-
+#Starts a new hand for singleplayer state
 def _start_new_game() -> BlackjackState:
     deck = _new_deck()
     state = BlackjackState(
@@ -92,7 +92,7 @@ def _start_new_game() -> BlackjackState:
 
     return state
 
-
+#Dealer draws if <16 then compares final totals
 def _finish_round(state: BlackjackState) -> None:
     if state.game_over:
         return
@@ -116,7 +116,7 @@ def _finish_round(state: BlackjackState) -> None:
 
     state.game_over = True
 
-
+#Turns final result into database result string
 def _result_from_state(state: BlackjackState) -> str | None:
     if not state.game_over:
         return None
@@ -134,7 +134,7 @@ def _result_from_state(state: BlackjackState) -> str | None:
         return "Loss"
     return "Push"
 
-
+#Payloads serialise the backend state into JSON shape flutter receives 
 def _state_to_payload(state: BlackjackState) -> dict:
     return {
         "player_cards": state.player,
@@ -147,14 +147,14 @@ def _state_to_payload(state: BlackjackState) -> dict:
         "result": _result_from_state(state),
     }
 
-
+#Unused HTTP features from previous blackjack version
 @router.post("/deal")
 def blackjack_deal():
     global _current_blackjack
     _current_blackjack = _start_new_game()
     return _state_to_payload(_current_blackjack)
 
-
+#Unused HTTP features from previous blackjack version
 @router.post("/hit")
 def blackjack_hit():
     global _current_blackjack
@@ -174,7 +174,7 @@ def blackjack_hit():
 
     return _state_to_payload(state)
 
-
+#Unused HTTP features from previous blackjack version
 @router.post("/stand")
 def blackjack_stand():
     global _current_blackjack
@@ -186,7 +186,7 @@ def blackjack_stand():
     _finish_round(state)
     return _state_to_payload(state)
 
-
+#Wrap functions, allows ws_blackjack to call deal() Hit() etc without knowing http route names
 def deal() -> dict:
     return blackjack_deal()
 
@@ -198,7 +198,7 @@ def hit(game_id: str | None = None) -> dict:
 def stand(game_id: str | None = None) -> dict:
     return blackjack_stand()
 
-
+#Game state for one player
 @dataclass
 class TablePlayerState:
     id: str
@@ -212,7 +212,7 @@ class TablePlayerState:
     bet: int = 0
     joined_mid_round: bool = False
 
-
+#Whole Multiplayer blackjack table state 
 @dataclass
 class RoomBlackjackState:
     room_id: str
@@ -228,16 +228,16 @@ class RoomBlackjackState:
     dealer_revealed: bool = False
     betting_open: bool = False
 
-
+#Storage for active multiplayer state
 _room_blackjack_games: Dict[str, RoomBlackjackState] = {}
 
-
+#Creates or fetches room state object 
 def get_room_game(room_id: str) -> RoomBlackjackState:
     if room_id not in _room_blackjack_games:
         _room_blackjack_games[room_id] = RoomBlackjackState(room_id=room_id)
     return _room_blackjack_games[room_id]
 
-
+#Resets players for a fresh round
 def _reset_player_for_round(player: TablePlayerState) -> None:
     player.cards = []
     player.stood = False
@@ -248,7 +248,7 @@ def _reset_player_for_round(player: TablePlayerState) -> None:
     player.bet = 0
     player.joined_mid_round = False
 
-
+#Returns players who are allowed to play
 def _active_player_ids(state: RoomBlackjackState) -> List[str]:
     ids: List[str] = []
     for pid in state.player_order:
@@ -260,7 +260,7 @@ def _active_player_ids(state: RoomBlackjackState) -> List[str]:
         ids.append(pid)
     return ids
 
-
+#Used to choose first player turn after bets 
 def _first_active_player(state: RoomBlackjackState) -> Optional[str]:
     for pid in state.player_order:
         player = state.players.get(pid)
@@ -268,7 +268,7 @@ def _first_active_player(state: RoomBlackjackState) -> Optional[str]:
             return pid
     return None
 
-
+#Moves turn to next player
 def _next_active_player_after(state: RoomBlackjackState, current_player_id: str) -> Optional[str]:
     if current_player_id not in state.player_order:
         return _first_active_player(state)
@@ -280,14 +280,14 @@ def _next_active_player_after(state: RoomBlackjackState, current_player_id: str)
             return pid
     return None
 
-
+#Decides when round is finished 
 def _all_players_finished(state: RoomBlackjackState) -> bool:
     active_ids = _active_player_ids(state)
     if not active_ids:
         return True
     return all(state.players[pid].finished for pid in active_ids)
 
-
+#Compares one player to dealer after round
 def _resolve_player_result(player_total: int, dealer_total: int) -> str:
     if player_total > 21:
         return "Loss"
@@ -299,7 +299,7 @@ def _resolve_player_result(player_total: int, dealer_total: int) -> str:
         return "Loss"
     return "Push"
 
-
+#Adds or updates a websocket joined player 
 def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -327,7 +327,7 @@ def add_room_player(room_id: str, player_id: str, player_name: str) -> RoomBlack
 
     return state
 
-
+#Handles player disconnect and host / turn cleanup
 def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -384,7 +384,7 @@ def remove_room_player(room_id: str, player_id: str) -> RoomBlackjackState:
 
     return state
 
-
+#Set bet, reads room id player id and the amount bet 
 def set_room_bet(room_id: str, player_id: str, amount: int) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -429,7 +429,7 @@ def set_room_bet(room_id: str, player_id: str, amount: int) -> RoomBlackjackStat
 
     return state
 
-
+#Checks if betting phase concludes 
 def _all_players_have_bets(state: RoomBlackjackState) -> bool:
     active_ids = _active_player_ids(state)
     if len(active_ids) < 2:
@@ -444,7 +444,7 @@ def _all_players_have_bets(state: RoomBlackjackState) -> bool:
 
     return True
 
-
+#Switch from betting to play
 def _begin_play_after_bets(state: RoomBlackjackState) -> None:
     state.betting_open = False
 
@@ -456,7 +456,7 @@ def _begin_play_after_bets(state: RoomBlackjackState) -> None:
     state.turn_player_id = first_pid
     state.status = f"{state.players[first_pid].name}'s turn"
 
-
+#Start multiplayer blackjack game
 def start_room_game(room_id: str) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -507,7 +507,7 @@ def start_room_game(room_id: str) -> RoomBlackjackState:
 
     return state
 
-
+#Hit for 1 player
 def room_hit(room_id: str, player_id: str) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -546,7 +546,7 @@ def room_hit(room_id: str, player_id: str) -> RoomBlackjackState:
 
     return state
 
-
+#Stand action 
 def room_stand(room_id: str, player_id: str) -> RoomBlackjackState:
     state = get_room_game(room_id)
 
@@ -575,7 +575,7 @@ def room_stand(room_id: str, player_id: str) -> RoomBlackjackState:
 
     return state
 
-
+#Completes round and sets player results
 def _finish_room_round(state: RoomBlackjackState) -> None:
     state.turn_player_id = None
     state.dealer_revealed = True
@@ -598,7 +598,7 @@ def _finish_room_round(state: RoomBlackjackState) -> None:
     state.game_over = True
     state.status = "Round complete."
 
-
+#Converts backend into ui friendly phase 
 def _room_phase(state: RoomBlackjackState) -> str:
     if not state.game_started:
         return "waiting"
@@ -610,7 +610,7 @@ def _room_phase(state: RoomBlackjackState) -> str:
         return "dealer"
     return "playing"
 
-
+#Broadcast blackjack room to websocket. Builds table_state json for flutter client
 def room_state_to_payload(room_id: str, you_id: Optional[str] = None) -> dict:
     state = get_room_game(room_id)
 
