@@ -43,7 +43,7 @@ class _PokerLobbyScreenState extends State<PokerLobbyScreen> {
       await _connectAndListen();
     });
   }
-
+//Use the uid to look up players username so i display readable name rather than raw uid
   Future<String> _fetchUsernameForUid(String uid) async {
     try {
       final q = await FirebaseFirestore.instance

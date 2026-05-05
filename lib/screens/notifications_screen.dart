@@ -25,12 +25,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   static const String _baseHttp = 'http://16.170.162.140:8000';
 
   String get uid => _auth.currentUser!.uid;
-
+//Accepts friend request
   Future<void> _acceptFriendRequest(
       String notificationId,
       String fromUid,
       ) async {
     try {
+      //Array union allows for simultaneous update of both users friends array when friend reqs are accepted
       await _firestore.collection('users').doc(uid).set({
         'friends': FieldValue.arrayUnion([fromUid])
       }, SetOptions(merge: true));
@@ -85,7 +86,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
   }
-
+//Checks backend room exists, accepted invite navigates to either games
   Future<void> _joinGameInvite(
       String notificationId,
       String roomId,
@@ -187,6 +188,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    //Creates notifications query/stream
     final notificationsQuery = _firestore
         .collection('users')
         .doc(uid)

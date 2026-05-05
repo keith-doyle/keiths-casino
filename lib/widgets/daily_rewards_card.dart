@@ -28,9 +28,9 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
   int _secondsUntilNextClaim = 0;
   int _loginStreak = 0;
   int _nextReward = 10;
-
+//Returns the current firebase auth user uid or null igf no1 is signed in
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
-
+//Subscribes to current users firestore document snapshots and loads reward status when user data changes
   @override
   void initState() {
     super.initState();
@@ -50,7 +50,7 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
       _loadRewardStatus();
     });
   }
-
+//Calls GET /rewards/status/{uid} parses can claim streak premium etc
   Future<void> _loadRewardStatus() async {
     final uid = _uid;
 
@@ -103,7 +103,7 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
       _refreshing = false;
     }
   }
-
+//Calls post /rewards/claim-daily with uid, shows claimed snackbar then reloads
   Future<void> _claimReward() async {
     final uid = _uid;
 
@@ -149,7 +149,7 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
       }
     }
   }
-
+//Converts seconds remaining into readable minutes/hours text
   String _timeRemainingLabel() {
     if (_secondsUntilNextClaim <= 0) return 'Available';
 
@@ -160,13 +160,13 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
 
     return '${hours}h ${minutes}m left';
   }
-
+//Cancels firestore user document subscription
   @override
   void dispose() {
     _userSub?.cancel();
     super.dispose();
   }
-
+//Build loading error reward ui premium/free styling streak text etc
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -256,7 +256,7 @@ class _DailyRewardCardState extends State<DailyRewardCard> {
       ),
     );
   }
-
+//Builds gradient container premium users get (Orange) fremium (blue)
   Widget _pillShell({required Widget child}) {
     return Container(
       width: double.infinity,

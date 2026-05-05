@@ -53,7 +53,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     _loadCoins();
     _connectAndListen();
   }
-
+//Loads players balance for multiplayer betting
   Future<void> _loadCoins() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -70,7 +70,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       });
     } catch (_) {}
   }
-
+//Connects to websocket, flutter receives table_state for blackjack
   void _connectAndListen() {
     _ws.connectToBlackjackTable(roomId: widget.roomId);
 
@@ -157,7 +157,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
           if (!_gameOver) {
             _savedThisRound = false;
           }
-
+          //save result and record stats and coins, prevents duplicate saves from repeated final table states
           if (!previousGameOver && _gameOver && !_savedThisRound) {
             final me = _myPlayer;
             final result = me?["result"]?.toString();
@@ -200,7 +200,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       },
     );
   }
-
+//These getters convert backend JSON into ui permissions
   Map<String, dynamic>? get _myPlayer {
     try {
       return _players.firstWhere((p) => p["id"] == widget.playerId);
@@ -266,7 +266,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     if (result == 'Loss') return -_myBet;
     return 0;
   }
-
+//Creates top level message such as waiting for players, your turn etc
   String _heroText() {
     if (!_gameStarted) {
       if (_players.length < 2) return 'Waiting for more players';
@@ -293,7 +293,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
     if (_turnPlayerId == null) return 'Dealer resolving';
     return 'Waiting for $_turnPlayerName';
   }
-
+//Flutter requests a bet, then blackjack py validates it server side. Sends chosen bet to backend
   void _sendBet(int amount) {
     if (amount > _coins) {
       setState(() {
@@ -313,7 +313,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       "amount": amount,
     });
   }
-
+//FireStore reference for recording of Results, coins, stats
   Future<void> _saveMatchStatsAndCoins(String resultStr) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
@@ -331,7 +331,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         : resultStr == 'Loss'
         ? -myBet
         : 0;
-
+//User ref collection matches and stats
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final matchesRef = userRef.collection('matches');
     final statsRef = userRef.collection('stats').doc('blackjack');
@@ -482,7 +482,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       }
     });
   }
-
+//Result color coding
   Color _resultColor(String? result) {
     switch (result) {
       case 'Win':
@@ -495,7 +495,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
         return Colors.white;
     }
   }
-
+//Converts players flags like busted, stood blackjack etc into readable label and color
   String _seatStateText(Map<String, dynamic>? player) {
     if (player == null) return 'Waiting';
 
@@ -579,7 +579,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Renders card hand for dealer opponents and current player
   Widget _buildFanHand(
       List<String> cards, {
         required double cardWidth,
@@ -620,7 +620,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Builds hero header for multiplayer room, status, room id etc
   Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
@@ -670,7 +670,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Shows dealers cards and total only when revealed
   Widget _buildDealerSeat() {
     final dealerTotalText =
     _dealerRevealed ? (_dealerTotal?.toString() ?? '-') : '??';
@@ -755,7 +755,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ],
     );
   }
-
+//Builds one opponent panel with cards, status, bet and turn
   Widget _buildOpponentSeat(Map<String, dynamic> player) {
     final isTurn = player["id"] == _turnPlayerId;
     final isHost = player["id"] == _hostPlayerId;
@@ -853,7 +853,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Display up to 2 opponents using _opponents.take(2)
   Widget _buildOpponentsRow() {
     final opponents = _opponents;
     if (opponents.isEmpty) {
@@ -878,7 +878,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ],
     );
   }
-
+//Builds the signed in players seat with cards total bet etc
   Widget _buildMySeat() {
     final me = _myPlayer;
     final cards = List<String>.from(me?["cards"] ?? []);
@@ -981,7 +981,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Multiplayer betting ui linked to websocket bet action
   Widget _buildBetSelector() {
     Widget chip(int amount) {
       final selected = _selectedBet == amount;
@@ -1078,7 +1078,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Shows final result after game_over from backend
   Widget _buildRoundSummary() {
     if (!_gameOver) return const SizedBox.shrink();
 
@@ -1174,7 +1174,7 @@ class _BlackjackTableScreenState extends State<BlackjackTableScreen> {
       ),
     );
   }
-
+//Builds action button from backend phase / ws send start + action
   Widget _buildControls() {
     ButtonStyle style(Color bg) {
       return FilledButton.styleFrom(

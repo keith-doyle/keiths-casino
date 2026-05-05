@@ -18,17 +18,17 @@ class FriendProfileScreen extends StatelessWidget {
     required this.friendUid,
     required this.friendUsername,
   });
-
+//format dates
   String _fmtDate(dynamic ts) {
     if (ts is! Timestamp) return '-';
     return ts.toDate().toLocal().toString().split('.').first;
   }
-
+//calc win rate
   double _winRate(int wins, int gamesPlayed) {
     if (gamesPlayed == 0) return 0;
     return (wins / gamesPlayed) * 100.0;
   }
-
+//maps results colors
   Color _resultColor(String result) {
     switch (result) {
       case 'Win':
@@ -41,11 +41,11 @@ class FriendProfileScreen extends StatelessWidget {
         return Colors.black87;
     }
   }
-
+//safely read stats
   int _intVal(Map<String, dynamic>? data, String key) {
     return ((data?[key] ?? 0) as num).toInt();
   }
-
+//Stream friends user doc stats recent matched and open chat button
   @override
   Widget build(BuildContext context) {
     final myUid = FirebaseAuth.instance.currentUser!.uid;

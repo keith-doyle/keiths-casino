@@ -29,7 +29,7 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
           (_) => chars[rand.nextInt(chars.length)],
     ).join();
   }
-
+//Calls fastapi post /rooms/create with room id host player id and game = poker, then navigates to poker lobby screen
   Future<void> _createRoom() async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null) {
@@ -87,7 +87,7 @@ class _PokerRoomScreenState extends State<PokerRoomScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
+//Validates poker room code and then navigates to poker lobby screen
   Future<void> _joinRoom() async {
     final roomCode = _roomCodeController.text.trim().toUpperCase();
 

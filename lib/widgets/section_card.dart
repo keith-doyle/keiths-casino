@@ -14,7 +14,7 @@ class SectionCard extends StatelessWidget {
     this.trailing,
     this.padding,
   });
-
+//Reusable titled cards with optional trailing widget
   @override
   Widget build(BuildContext context) {
     return Container(

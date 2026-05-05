@@ -20,7 +20,7 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
   static const String _baseHttp = 'http://16.170.162.140:8000';
 
   bool _busy = false;
-
+//Creates short lobby code
   String _generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rand = Random();
@@ -29,7 +29,7 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
           (_) => chars[rand.nextInt(chars.length)],
     ).join();
   }
-
+//Calls fastapi post /rooms/create with room id host player id and game = blackjack, then navigates to blackjack lobby screen
   Future<void> _createLobby() async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null) {
@@ -87,7 +87,7 @@ class _BlackjackRoomScreenState extends State<BlackjackRoomScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
+//Checks if room exists through /rooms/{id}/ exists and navigates to blackjacklobby if valid
   Future<void> _joinLobby() async {
     final roomCode = _roomCodeController.text.trim().toUpperCase();
 

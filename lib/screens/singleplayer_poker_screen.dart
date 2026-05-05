@@ -52,7 +52,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
     super.initState();
     _loadCoins();
   }
-
+//Creates local deck for solo poker
   List<String> _freshDeck() {
     final deck = <String>[];
     for (final r in _ranks) {
@@ -63,7 +63,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
     deck.shuffle(_rand);
     return deck;
   }
-
+//Simplified solo scoring not full hand ranking
   int _cardValue(String card) {
     final rank = card.substring(0, card.length - 1);
     final index = _ranks.indexOf(rank);
@@ -73,7 +73,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
   int _simpleScore(List<String> cards) {
     return cards.map(_cardValue).fold(0, (a, b) => a + b);
   }
-
+//Loads persisted balance from db before joining poker table
   Future<void> _loadCoins() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -90,7 +90,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       });
     } catch (_) {}
   }
-
+//Starts a singleplayer poker round with initial cards and pot
   void _startRound() {
     if (_coins < 10) {
       setState(() {
@@ -115,7 +115,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       _pot = 20;
     });
   }
-
+//Persists singleplayer poker outcome
   Future<void> _saveSingleplayerPokerResult(String resultStr) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception('Not signed in');
@@ -250,7 +250,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       }
     });
   }
-
+//Moves Solo poker through pre flop, flop, turn, river, showdown
   Future<void> _advancePhase() async {
     if (!_roundActive || _roundOver) return;
 
@@ -293,7 +293,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
 
     await _showdown();
   }
-
+//Calculates and saves solo poker winner
   Future<void> _showdown() async {
     final playerAll = [..._playerCards, ..._communityCards];
     final opponentAll = [..._opponentCards, ..._communityCards];
@@ -328,7 +328,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
       }
     }
   }
-
+//Check action
   Future<void> _check() async {
     if (!_roundActive || _roundOver || _savingResult) return;
     setState(() {
@@ -336,7 +336,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
     });
     await _advancePhase();
   }
-
+//Raise action
   Future<void> _raise() async {
     if (!_roundActive || _roundOver || _savingResult) return;
 
@@ -358,7 +358,7 @@ class _SingleplayerPokerScreenState extends State<SingleplayerPokerScreen> {
 
     await _advancePhase();
   }
-
+//Fold action
   Future<void> _fold() async {
     if (!_roundActive || _roundOver || _savingResult) return;
 

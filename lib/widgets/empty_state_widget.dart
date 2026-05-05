@@ -11,7 +11,7 @@ class EmptyStateWidget extends StatelessWidget {
     required this.title,
     required this.subtitle,
   });
-
+//Reusable centred empty state with icon and subtitle, prevents blank screens
   @override
   Widget build(BuildContext context) {
     return Center(

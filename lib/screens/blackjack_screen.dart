@@ -43,14 +43,14 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
   bool _betLockedForHand = false;
   String? _resultStr;
-
+//Starts screen by loading coins and opening websocket listener
   @override
   void initState() {
     super.initState();
     _loadCoins();
     _connectAndListen();
   }
-
+//Sets tutorial modes coins to 1000
   Future<void> _loadCoins() async {
     if (widget.tutorialMode) {
       if (!mounted) return;
@@ -75,7 +75,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       });
     } catch (_) {}
   }
-
+//Winn loss push for tutorial, coins only updated for tutorial result
   void _applyTutorialResult(String resultStr) {
     final bet = _selectedBet;
     final coinDelta = resultStr == 'Win'
@@ -90,7 +90,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       if (_coins < 0) _coins = 0;
     });
   }
-
+//Connects to websocket, flutter receives table_state for blackjack
   void _connectAndListen() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final roomId = uid ?? "testroom";
@@ -158,7 +158,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             _resultStr = msg["result"]?.toString();
             _busy = false;
           });
-
+          //save result and record stats and coins, prevents duplicate saves from repeated final table states
           if (_gameOver && _betLockedForHand && !_savedThisHand) {
             _savedThisHand = true;
             try {
@@ -203,7 +203,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       },
     );
   }
-
+//Sends Players intent to backend socket
   void _sendAction(String action) {
     if (!mounted) return;
 
@@ -231,7 +231,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       "game_id": _gameId,
     });
   }
-
+//Locks selected bet before hit or stand actions
   Future<void> _confirmBetForHand() async {
     if (_selectedBet > _coins) {
       setState(() {
@@ -268,7 +268,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       }
     }
   }
-
+//FireStore reference for recording of Results, coins, stats
   Future<void> _saveMatchStatsAndCoins(dynamic result) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
@@ -437,7 +437,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       }
     });
   }
-
+//Builds lesson text depending on current blackjackstate
   int? _dealerUpCardValue() {
     if (_dealerCards.isEmpty) return null;
     final id = _dealerCards.first.toUpperCase();
@@ -457,7 +457,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         return int.tryParse(rank);
     }
   }
-
+//Turn game state in educational tutorial
   String _tutorialHeading() {
     if (_gameId == null) return 'How tutorial mode works';
     if (_gameOver) return 'Hand review';
@@ -519,7 +519,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     }
     return 'Rule reminder: blackjack decisions are about card totals and dealer pressure, not just guessing.';
   }
-
+//gives result feedback color
   Color _resultColor(String? result) {
     switch (result) {
       case 'Win':
@@ -532,7 +532,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         return Colors.white;
     }
   }
-
+//main large status message for top of the game screen
   String _heroStatusText() {
     if (_gameId == null) {
       return widget.tutorialMode
@@ -555,7 +555,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
     return 'Your move';
   }
-
+//reusable rounded label for compact state, coins ,bets, total or phase
   Widget _pill(String text, {Color? color}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -574,7 +574,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Reusable icon/text badge for labels like tutorial, dealer, player or status
   Widget _badge(
       String label, {
         required Color fg,
@@ -596,7 +596,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Displays a list of playingcardwidgets with slight offset to look like a hand
   Widget _buildFanHand(
       List<String> cards, {
         required double cardWidth,
@@ -637,7 +637,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Build the top hero area showing mode status coins etc
   Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
@@ -690,7 +690,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Builds dealer panel with dealer cards, total and hidden revealed
   Widget _buildDealerSeat() {
     final dealerTotalText = _dealerRevealed ? _dealerTotal.toString() : '??';
 
@@ -736,7 +736,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Reusable mini row for icon
   Widget _buildCompactInfoLine({
     required int bet,
     required int total,
@@ -774,7 +774,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ],
     );
   }
-
+//Builds player panel with players cards total bet action state
   Widget _buildMySeat() {
     return Container(
       width: double.infinity,
@@ -861,7 +861,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Shows tutorial heading/ if tutorial mode is true
   Widget _buildTutorialCard() {
     if (!widget.tutorialMode) return const SizedBox.shrink();
 
@@ -906,7 +906,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//UI for selecting hand bet
   Widget _buildBetSelector() {
     Widget chip(int amount) {
       final selected = _selectedBet == amount;
@@ -988,7 +988,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Displays current backend / system status
   Widget _buildStatusBar() {
     return Container(
       width: double.infinity,
@@ -1009,7 +1009,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Appears after game and shows results coin change etc
   Widget _buildRoundSummary() {
     if (!_gameOver) return const SizedBox.shrink();
 
@@ -1089,7 +1089,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ),
     );
   }
-
+//Maps current hand state to available buttons
   Widget _buildControls() {
     final canPlayMove =
         !_busy && !_gameOver && _gameId != null && _betLockedForHand;
@@ -1159,14 +1159,14 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       ],
     );
   }
-
+//cancels streams subscription and disconnects websocket
   @override
   void dispose() {
     _sub?.cancel();
     _ws.disconnect();
     super.dispose();
   }
-
+//composes the full screen, header dealer player tutorial card etc
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;

@@ -6,7 +6,7 @@ class AppTheme {
   static const Color _card = Colors.white;
   static const Color _text = Color(0xFF111827);
   static const Color _muted = Color(0xFF6B7280);
-
+//Builds global material 3 light theme, color scheme scaffold app bars text button etc
   static ThemeData light() {
     final base = ThemeData(
       useMaterial3: true,
@@ -143,7 +143,7 @@ class AppTheme {
       ),
     );
   }
-
+//Reusable gradient decoration for hero cards
   static BoxDecoration get gradientHeroDecoration => BoxDecoration(
     gradient: const LinearGradient(
       begin: Alignment.topLeft,
@@ -163,7 +163,7 @@ class AppTheme {
       ),
     ],
   );
-
+//Reusable white card with rounded corners
   static BoxDecoration get softCardDecoration => BoxDecoration(
     color: _card,
     borderRadius: BorderRadius.circular(24),
@@ -178,7 +178,7 @@ class AppTheme {
       ),
     ],
   );
-
+//Reusable translucent dark/glass decoration
   static BoxDecoration glassDarkDecoration() => BoxDecoration(
     color: Colors.white.withOpacity(0.08),
     borderRadius: BorderRadius.circular(18),

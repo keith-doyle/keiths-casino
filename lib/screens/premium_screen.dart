@@ -17,7 +17,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   bool _busy = false;
   String? _error;
-
+//Gets firebase user, posts uid/email/plan to billing and receives url
   Future<void> _startCheckout(String plan) async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -75,7 +75,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       }
     }
   }
-
+//Reusable row showing premium benefit explanation
   Widget _benefit(IconData icon, String title, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +95,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       ],
     );
   }
-
+// builds monthly / yearly plans
   Widget _planCard({
     required String title,
     required String price,
@@ -163,7 +163,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       ),
     );
   }
-
+//Composes premium page
   @override
   Widget build(BuildContext context) {
     return Scaffold(

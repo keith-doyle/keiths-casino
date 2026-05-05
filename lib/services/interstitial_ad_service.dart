@@ -10,7 +10,7 @@ class InterstitialAdService {
 
   static const String _testInterstitialAdUnitId =
       'ca-app-pub-3940256099942544/1033173712';
-
+//Loads google test interstitial ad
   static Future<void> load() async {
     if (_isLoading || _interstitialAd != null) return;
 
@@ -31,7 +31,7 @@ class InterstitialAdService {
       ),
     );
   }
-
+//reads if isPremium is true or false before deciding to show the ad
   static Future<bool> _currentUserIsPremium() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -42,7 +42,7 @@ class InterstitialAdService {
 
     return data?['isPremium'] == true;
   }
-
+//Checks premium status, checks ad counter loads if needed
   static Future<void> handleCompletedGame() async {
     final isPremium = await _currentUserIsPremium();
 
@@ -77,7 +77,7 @@ class InterstitialAdService {
 
     await ad.show();
   }
-
+//Disposes loaded interstitial ad and clears reference
   static void dispose() {
     _interstitialAd?.dispose();
     _interstitialAd = null;

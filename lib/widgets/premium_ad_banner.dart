@@ -13,13 +13,13 @@ class PremiumAdBanner extends StatelessWidget {
     if (uid == null) {
       return const SizedBox.shrink();
     }
-
+//loads user doc and reads if premium
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, snapshot) {
         final userData = snapshot.data?.data();
         final isPremium = userData?['isPremium'] == true;
-
+//uses sized box shrink to remove ad for premium users
         if (isPremium) {
           return const SizedBox.shrink();
         }
@@ -44,7 +44,7 @@ class _AdMobBannerState extends State<_AdMobBanner> {
   @override
   void initState() {
     super.initState();
-
+//ad design for fremium users
     _bannerAd = BannerAd(
       adUnitId: 'ca-app-pub-3940256099942544/6300978111',
       size: AdSize.banner,
@@ -72,7 +72,6 @@ class _AdMobBannerState extends State<_AdMobBanner> {
     _bannerAd?.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     if (!_loaded || _bannerAd == null) {

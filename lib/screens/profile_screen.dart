@@ -11,17 +11,17 @@ import 'matches_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   ProfileScreen({super.key});
-
+//Converts firestore timestamp into local readable string
   String _fmtDate(dynamic ts) {
     if (ts is! Timestamp) return '-';
     return ts.toDate().toLocal().toString().split('.').first;
   }
-
+//Calculates wins / gamesplayed * 100
   double _winRate(int wins, int gamesPlayed) {
     if (gamesPlayed == 0) return 0;
     return (wins / gamesPlayed) * 100.0;
   }
-
+//maps match result to text and background colors
   Color _resultColor(String result) {
     switch (result) {
       case 'Win':
@@ -47,7 +47,7 @@ class ProfileScreen extends StatelessWidget {
         return Colors.black.withOpacity(0.05);
     }
   }
-
+//safely reads numeric stat value
   int _intVal(Map<String, dynamic>? data, String key) {
     return ((data?[key] ?? 0) as num).toInt();
   }
@@ -57,7 +57,7 @@ class ProfileScreen extends StatelessWidget {
         ? Icons.table_bar_rounded
         : Icons.casino_rounded;
   }
-
+//Streams user doc, blackjack stats poker stats and last five matches.
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;

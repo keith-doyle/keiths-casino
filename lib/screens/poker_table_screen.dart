@@ -59,7 +59,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       _connectAndListen();
     });
   }
-
+//Loads persisted balance from db before joining poker table
   Future<void> _loadCoins() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -76,7 +76,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       });
     } catch (_) {}
   }
-
+//Connects to websocket, flutter receives table_state for poker
   void _connectAndListen() {
     _ws.connectToPokerTable(roomId: widget.roomId);
 
@@ -126,7 +126,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           );
           return;
         }
-
+        //Flutter table state, reads community cards, phase,pot,bet,winner,blinds from payload
         if (type == "table_state") {
           final previousRoundOver = _roundOver;
 
@@ -158,7 +158,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
           if (!_roundOver) {
             _savedThisRound = false;
           }
-
+          //save result and record stats and coins, prevents duplicate saves from repeated final table states
           if (!previousRoundOver && _roundOver && !_savedThisRound) {
             final me = _myPlayer;
             if (me != null) {
@@ -202,7 +202,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       },
     );
   }
-
+//Getters from backends payload table_state
   bool get _isHost => _hostPlayerId == widget.playerId;
   bool get _isMyTurn => _turnPlayerId == widget.playerId;
   bool get _iWon => _winnerPlayerId == widget.playerId;
@@ -218,7 +218,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
   List<String> get _myCards => List<String>.from(_myPlayer?["cards"] ?? []);
   int get _myChips => ((_myPlayer?["chips"] ?? 0) as num).toInt();
   int get _myCurrentBet => ((_myPlayer?["current_bet"] ?? 0) as num).toInt();
-
+//Persists Poker multiplayer result and balance
   Future<void> _savePokerMatchStatsAndCoins() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw Exception("Not signed in");
@@ -233,7 +233,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
     final rawOpponentCount =
         _players.where((p) => p["id"] != widget.playerId).length;
     final opponentCount = rawOpponentCount < 1 ? 1 : rawOpponentCount;
-
+//User ref collection matches and stats
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final matchesRef = userRef.collection('matches');
     final statsRef = userRef.collection('stats').doc('poker');
@@ -373,7 +373,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       }
     });
   }
-
+//Send fold, check, call, raise intent to backend. JSON type == action sent to backend
   void _sendAction(String action, {int amount = 0}) {
     if (_busy || !_isMyTurn || _roundOver || !_gameStarted) return;
 
@@ -391,7 +391,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       }
     });
   }
-
+//Builds text for waiting, host start, own turn, or another player's turn
   String _turnLabel() {
     if (_roundOver) return 'Round complete';
     if (!_gameStarted) {
@@ -409,7 +409,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       return 'Turn active';
     }
   }
-
+//Converts backend phase values into ui wording
   String _buildStatusText() {
     if (_roundOver) return _winnerLabel();
 
@@ -431,7 +431,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         return _status;
     }
   }
-
+//Shows the resolved backend winner in english
   String _winnerLabel() {
     if (_iWon) {
       return _winningHandName == null
@@ -449,7 +449,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       return 'Round complete';
     }
   }
-
+//Color coding for phases
   Color _phaseColor() {
     switch (_phase) {
       case 'preflop':
@@ -466,7 +466,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
         return Colors.white70;
     }
   }
-
+//reusable small status pill for phase, pot,bet and player data
   Widget _pill(String text, {Color? color}) {
     final fg = color ?? Colors.white;
     return Container(
@@ -488,7 +488,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//displays role badges such as dealer big blind small blind
   Widget _roleBadge(String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -507,7 +507,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//reusable titled container for table subsections
   Widget _panel(String title, Widget child, {Widget? trailing}) {
     return Container(
       width: double.infinity,
@@ -548,7 +548,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//Creates the darker green poker table style
   Widget _tableSurface({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -576,7 +576,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       child: child,
     );
   }
-
+//renders a compact row playingcardwidgets or face down/placeholder cards
   Widget _buildSmallCards(List<String> cards) {
     if (cards.isEmpty) {
       return const SizedBox.shrink();
@@ -600,7 +600,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//Shows the five card board area filling missing cards with placeholders until dealt
   Widget _buildCommunityCards() {
     if (_communityCards.isEmpty) {
       return const Text(
@@ -631,7 +631,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//Shows the current players hole cards + chip bet info
   Widget _buildMyCards() {
     if (_myCards.isEmpty) {
       return const Text(
@@ -662,7 +662,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//Build a player card for each seat with name chips bet folded state role badges and revealed cards at showdown
   Widget _buildPlayerCard(Map<String, dynamic> player) {
     final id = player["id"];
     final isTurn = id == _turnPlayerId;
@@ -755,7 +755,7 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ),
     );
   }
-
+//Buttons are enabled according to current betting state
   Widget _buildPrimaryActionArea() {
     ButtonStyle style(Color bg) {
       return FilledButton.styleFrom(
@@ -893,14 +893,14 @@ class _PokerTableScreenState extends State<PokerTableScreen> {
       ],
     );
   }
-
+//cancels websocket stream and disconnects service
   @override
   void dispose() {
     _sub?.cancel();
     _ws.disconnect();
     super.dispose();
   }
-
+//Composes full poker table screen, header phase/pot info community cards etc
   @override
   Widget build(BuildContext context) {
     final tableStateText = _roundOver

@@ -18,7 +18,7 @@ class _ManagePremiumScreenState extends State<ManagePremiumScreen> {
 
   bool _busy = false;
   String? _error;
-
+//posts uid to /billing/create-portal/session opens stripe billing portal
   Future<void> _openBillingPortal() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -73,6 +73,7 @@ class _ManagePremiumScreenState extends State<ManagePremiumScreen> {
       }
     }
   }
+  //Stream current user's premium fields and display tier/status and manage subscription
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -218,7 +219,7 @@ class _ManagePremiumScreenState extends State<ManagePremiumScreen> {
       ),
     );
   }
-
+//Reusable row for subscription status
   Widget _infoTile({
     required IconData icon,
     required String title,

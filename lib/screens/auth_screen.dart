@@ -21,7 +21,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLogin = true;
   bool _busy = false;
   String? _error;
-
+//checks username availabiltiy against db, case insensitive
   Future<bool> _usernameAvailable(String username) async {
     final unameLower = username.trim().toLowerCase();
     if (unameLower.length < 3) return false;
@@ -33,7 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     return !doc.exists;
   }
-
+//Handles Login and registration
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -44,13 +44,14 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       if (_isLogin) {
+        //login calls signinwithemailandpassword to verify login details
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailC.text.trim(),
           password: _passwordC.text.trim(),
         );
         return;
       }
-
+//check for username is taken for register
       final username = _usernameC.text.trim();
       final unameLower = username.toLowerCase();
 
@@ -59,28 +60,30 @@ class _AuthScreenState extends State<AuthScreen> {
         setState(() => _error = 'That username is already taken.');
         return;
       }
-
+//Registration creates firebase auth user using createuserwithemeailandpassword
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailC.text.trim(),
         password: _passwordC.text.trim(),
       );
+      //UID becomes firestore document id
       final uid = cred.user!.uid;
-
+//Creates users collection
       final users = FirebaseFirestore.instance.collection('users');
+      //Creats usernames collection
       final usernames = FirebaseFirestore.instance.collection('usernames');
-
+//Creates username document as identifier rather than uid in username collection
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final unameRef = usernames.doc(unameLower);
         final unameSnap = await tx.get(unameRef);
 
         if (unameSnap.exists) throw StateError('USERNAME_TAKEN_RACE');
-
+//Sets fields for usernames collection
         tx.set(unameRef, {
           'uid': uid,
           'username': username,
           'createdAt': FieldValue.serverTimestamp(),
         });
-
+//Sets fields for users collection
         tx.set(users.doc(uid), {
           'username': username,
           'usernameLower': unameLower,

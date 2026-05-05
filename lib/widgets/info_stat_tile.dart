@@ -11,7 +11,7 @@ class InfoStatTile extends StatelessWidget {
     required this.value,
     required this.icon,
   });
-
+//Reusable stat row with icon, label and value, turns raw stats into readable dashboard tiles
   @override
   Widget build(BuildContext context) {
     return Container(

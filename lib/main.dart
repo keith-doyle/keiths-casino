@@ -8,7 +8,7 @@ import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/interstitial_ad_service.dart';
 import 'theme/app_theme.dart';
-
+//initializes flutter binding firebase + mobile ads and interstitial ads
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -18,21 +18,22 @@ Future<void> main() async {
   await InterstitialAdService.load();
   runApp(const MyApp());
 }
-
+//Uses materialapp to set home to authgate
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    //Material app wraps in flutter material design, applies theme, title and sets auth gate
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Card Games Compendium',
+      title: "Keith's Casino",
       theme: AppTheme.light(),
       home: const AuthGate(),
     );
   }
 }
-
+//Authgate listens to firebaseAuth + authStateChanges
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -48,7 +49,7 @@ class AuthGate extends StatelessWidget {
             ),
           );
         }
-
+//no user means authScreen, signed in users are brought to homescreen
         final user = snap.data;
         if (user == null) {
           return AuthScreen();

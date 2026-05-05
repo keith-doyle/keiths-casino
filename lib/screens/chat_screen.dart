@@ -15,15 +15,15 @@ class ChatScreen extends StatefulWidget {
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
-
+//Controls the text input where user types there message
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
+//prevents duplicate sends
   bool _sending = false;
 
   String get _myUid => FirebaseAuth.instance.currentUser!.uid;
-
+//gets both users and friends uid and makes them into 1 uid chat
   String get _conversationId {
     final ids = [_myUid, widget.friendUid]..sort();
     return '${ids[0]}_${ids[1]}';
@@ -34,7 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   CollectionReference<Map<String, dynamic>> get _messagesRef =>
       _conversationRef.collection('messages');
-
+//Writes a message to conversations/{conversationID}/messages, creates chat_message notification for the friend
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _sending) return;
@@ -108,7 +108,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() => _sending = false);
     }
   }
-
+//time formatter
   String _fmtTime(dynamic ts) {
     if (ts is! Timestamp) return '';
     final dt = ts.toDate().toLocal();
@@ -116,14 +116,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
-
+//Dispose the text controller and scroll controller
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
-
+//Creates the ui
   @override
   Widget build(BuildContext context) {
     final messagesQuery = _messagesRef.orderBy('sentAt', descending: true);
@@ -135,6 +135,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
+            //Flutter listening to firestore in realtime with stream to read messages
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: messagesQuery.snapshots(),
               builder: (context, snap) {

@@ -31,7 +31,7 @@ class _InviteFriendScreenState extends State<InviteFriendScreen> {
     super.initState();
     _loadFriends();
   }
-
+//Reads users friends array, fetches each friend document and displays invite targets
   Future<void> _loadFriends() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -95,7 +95,7 @@ class _InviteFriendScreenState extends State<InviteFriendScreen> {
       });
     }
   }
-
+//Writes game invite notification to friend
   Future<void> _sendInvite(Map<String, dynamic> friend) async {
     if (_sending) return;
 
@@ -111,8 +111,9 @@ class _InviteFriendScreenState extends State<InviteFriendScreen> {
 
     try {
       final notificationId =
+      //Creates game invite notification id, game room id user who sent invite
           'game_invite_${currentUid}_${widget.roomId}_${widget.game}';
-
+//writes fields for notifications subcollection, makes invites actionable with fields
       await FirebaseFirestore.instance
           .collection('users')
           .doc(friendUid)

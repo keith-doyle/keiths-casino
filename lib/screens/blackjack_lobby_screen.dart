@@ -42,7 +42,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       await _connectAndListen();
     });
   }
-
+//Use the uid to look up players username so i display readable name rather than raw uid
   Future<String> _fetchUsernameForUid(String uid) async {
     try {
       final q = await FirebaseFirestore.instance
@@ -60,7 +60,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
 
     return uid.length >= 6 ? uid.substring(0, 6) : uid;
   }
-
+//Opens route to friend invite screen
   Future<void> _openInviteSheet() async {
     final roomId = _roomId;
     if (roomId == null) return;
@@ -76,7 +76,7 @@ class _BlackjackLobbyScreenState extends State<BlackjackLobbyScreen> {
       ),
     );
   }
-
+//Connects to lobby websocket, sends join, reads table_state player list/host, and updates lobby ui
   Future<void> _connectAndListen() async {
     final uid = FirebaseAuth.instance.currentUser?.uid ??
         "test_${DateTime.now().millisecondsSinceEpoch}";

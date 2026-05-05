@@ -40,7 +40,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     'A',
   ];
   static const _suits = ['H', 'D', 'C', 'S'];
-
+//Starts non-persistent poker tutorial round
   List<String> _freshDeck() {
     final deck = <String>[];
     for (final r in _ranks) {
@@ -76,7 +76,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
       _pot = 20;
     });
   }
-
+//Progress tutorial and update lessons
   void _advancePhase() {
     if (!_roundActive || _roundOver) return;
 
@@ -111,7 +111,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
       }
     });
   }
-
+//Practice only showdown
   void _showdown() {
     final playerAll = [..._playerCards, ..._communityCards];
     final opponentAll = [..._opponentCards, ..._communityCards];
@@ -134,7 +134,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
       }
     });
   }
-
+//Tutorial check
   void _check() {
     if (!_roundActive || _roundOver) return;
     setState(() {
@@ -143,7 +143,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     });
     _advancePhase();
   }
-
+//Tutorial raise
   void _raise() {
     if (!_roundActive || _roundOver) return;
     setState(() {
@@ -153,7 +153,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
     });
     _advancePhase();
   }
-
+//Tutorial fold
   void _fold() {
     if (!_roundActive || _roundOver) return;
     setState(() {
@@ -164,7 +164,7 @@ class _TutorialPokerScreenState extends State<TutorialPokerScreen> {
       'You folded. Folding means giving up the hand instead of risking more chips.';
     });
   }
-
+//Generates phase specific tutorial explanations
   String _lessonTitle() {
     switch (_phase) {
       case 'preflop':

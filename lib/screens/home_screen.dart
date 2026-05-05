@@ -42,6 +42,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+    //reads home user from users collection and their notifications collection
     final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
     final notificationsQuery = FirebaseFirestore.instance
         .collection('users')
@@ -57,8 +58,9 @@ class HomeScreen extends StatelessWidget {
             stream: userDoc.snapshots(),
             builder: (context, snap) {
               final data = snap.data?.data();
+              //reads user to see if they are premium
               final isPremium = data?['isPremium'] == true;
-
+              //text button for manage and upgrade premium screens
               return TextButton(
                 onPressed: () {
                   Navigator.push(
@@ -81,11 +83,11 @@ class HomeScreen extends StatelessWidget {
             },
           ),
 
+          //Notifications icon button + badge count for notifications read through db
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: notificationsQuery.snapshots(),
             builder: (context, snap) {
               final count = snap.data?.docs.length ?? 0;
-
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -133,7 +135,7 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
-
+//profile icon button ui
           IconButton(
             icon: const Icon(Icons.person_outline_rounded),
             tooltip: 'Profile',
@@ -144,7 +146,7 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
-
+//sign out icon button ui
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Sign out',
@@ -152,6 +154,8 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+
+      //Uses documentsnapshot to read users coins and username
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: userDoc.snapshots(),
         builder: (context, snap) {
@@ -172,7 +176,7 @@ class HomeScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 20),
-
+              //overview ui which uses users coins and username
               SectionCard(
                 title: 'Overview',
                 child: Row(
@@ -195,16 +199,17 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
+              //calls premium ad banner widget
               const SizedBox(height: 16),
               const PremiumAdBanner(),
-
+              //calls daily reward care widget
               const SizedBox(height: 16),
               const DailyRewardCard(),
 
               const SizedBox(height: 24),
               _sectionLabel(context, 'Blackjack'),
 
+              //Blackjack action tiles design
               PrimaryActionTile(
                 icon: Icons.groups_rounded,
                 title: 'Multiplayer Blackjack',
@@ -246,6 +251,8 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
+
+              //poker action tile design
 
               const SizedBox(height: 24),
               _sectionLabel(context, 'Poker'),
@@ -289,6 +296,8 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
+
+              //Your space action tile design
 
               const SizedBox(height: 24),
               _sectionLabel(context, 'Your Space'),

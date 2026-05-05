@@ -19,7 +19,7 @@ class PlayingCardWidget extends StatelessWidget {
     final path = faceDown
         ? 'assets/cards/back.png'
         : 'assets/cards/$cardId.png';
-
+//Chooses assets/cards for rendering of card images
     return SizedBox(
       width: width,
       height: height,

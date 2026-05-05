@@ -61,7 +61,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     if (rawUsername.isEmpty) return;
 
     setState(() => _loading = true);
-
+//Typed username turns typed username into uid once uid is found user can send notification
     try {
       final unameDoc =
       await _firestore.collection('usernames').doc(usernameLower).get();

@@ -108,7 +108,7 @@ class StatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-
+    //Reads aggregated stats
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final blackjackStatsDoc = userRef.collection('stats').doc('blackjack');
     final pokerStatsDoc = userRef.collection('stats').doc('poker');
@@ -133,7 +133,7 @@ class StatsScreen extends StatelessWidget {
             if (!blackjackSnap.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
-
+            //Creates stream to read referenced db data
             return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: pokerStatsDoc.snapshots(),
               builder: (context, pokerSnap) {

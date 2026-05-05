@@ -81,7 +81,7 @@ class MatchesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-
+//Reads users/{uid}/matches/ Reads completed matches
     final query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
